@@ -54,7 +54,6 @@ namespace URG_Console
             }
             catch (DirectoryNotFoundException ex)
             {
-                //Console.SetOut(new ConsoleTextBoxWriter(txtConsolePipe));
                 Console.WriteLine(ex.Message + Environment.NewLine + "Cannot operate further." + Environment.NewLine + "Exiting...");
                 Environment.Exit(-99);
                 return new string[0];

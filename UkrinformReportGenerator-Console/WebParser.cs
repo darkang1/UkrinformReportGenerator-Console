@@ -58,9 +58,6 @@ namespace URG_Console
 
                     HtmlDocument doc = web.Load(fileLinks.ElementAt(i).Key);
 
-                    //string newsTitle1 = doc.DocumentNode.SelectSingleNode("//h1[@class='newsTitle']")?.InnerText ?? "Unknown";
-                    //string publishDate = doc.DocumentNode.SelectSingleNode("//time[@datetime]")?.InnerText.ToString() ?? "01.01.2000 ";
-
                     string newsTitle = "";
                     HtmlNode[] newsTitlesArray = doc.DocumentNode.SelectNodes("//h1[@class='newsTitle'] | //div[@class='firstTitle']")?.ToArray() ?? throw new XPathException("Title body node is missing. Cannot obtain any text");
                     // Replacing HTML tags in the article's title with proper symbols

@@ -31,11 +31,11 @@ namespace URG_Console
             грудня = 12
         }
 
-        // Here setting default values, just in case
+        // Setting variables with default values
         private int _weekStartDay { get; set; } = 0;
         private int _weekEndDay { get; set; } = 0;
 
-        private Month _currMonthEnum { get; set; } = Month.січня; // Needed for easier generating proper month date in the file name;
+        private Month _currMonthEnum { get; set; } = Month.січня;
 
         private int _currYear { get; set; } = 2000;
 
@@ -56,16 +56,13 @@ namespace URG_Console
             SetCurrDate();
             SetHeader();
 
-            //displayHeader();
-            //displayDate();
-
             // Adding all parsed articles to an array
             Dictionary<string, string> fileLinks = new Dictionary<string, string>(DocsParser.GetLinks(folderPath));
             _parsedArticles = WebParser.ParseArticles(fileLinks);
 
             // Sorting parsed articles
             // For some ridiculous, unknown reason sometimes one function sorts properly, sometimes the other
-            // So we are using both, just to be sure
+            // So switch sorting function when needed
             SortParsedArticlesByLINQ();
             //sortParsedArticlesByDelegate();
 
@@ -87,7 +84,6 @@ namespace URG_Console
             TrimAndSetDate(thisWeekStart, thisWeekEnd);
 
         }
-
 
         private void TrimAndSetDate(string startDay, string endDay)
         {
@@ -150,6 +146,7 @@ namespace URG_Console
 
         }
 
+
         private void SortParsedArticlesByLINQ()
         {
             // Sorting list using LINQ query
@@ -162,7 +159,6 @@ namespace URG_Console
 
         private void SortParsedArticlesByDelegate()
         {
-            // Doesn't work at the moment for some reason
             // Sorting list using anonymos method type delegate
             if (_parsedArticles != null)
             {
@@ -174,9 +170,9 @@ namespace URG_Console
 
         }
 
+
         internal void DisplayParsedArtiles()
         {
-
             if (_parsedArticles == null || _parsedArticles.Count == 0)
             {
                 Console.WriteLine("[ReportGenerator] No parsed articles to display!");
@@ -233,8 +229,6 @@ namespace URG_Console
             Console.WriteLine($"Current year: {_currYear}");
         }
 
-
-        // Not my code
         private int GetCurrentMonthWeekNumber()
         {
             DateTime date = DateTime.Today;
