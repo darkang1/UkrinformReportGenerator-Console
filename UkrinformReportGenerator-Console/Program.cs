@@ -1,15 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Xceed.Document.NET;
-using Xceed.Words.NET;
-using HtmlAgilityPack;
-using System.Threading;
 using System.Globalization;
-using System.IO;
+using System.Text;
+using System.Threading;
+using Xceed.Words.NET;
 
 namespace URG_Console
 {
