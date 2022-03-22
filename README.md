@@ -1,5 +1,5 @@
 # Ukrinform Report Generator (Console Version)
-A report-generating tool created by request of Ukrinform News Agency.
+A report-generating tool created by the request of Ukrinform News Agency.
 
 ## Description
 **Ukrinform Report Generator** (URG) is a tool designed to generate weekly report based on provided article files of format **.doc** or **.docx**.
