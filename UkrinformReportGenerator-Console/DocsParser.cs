@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using Xceed.Words.NET;
 
 namespace URG_Console
@@ -11,22 +12,22 @@ namespace URG_Console
     internal class DocsParser
     {
 
-        internal static string[] getLinks()
+        internal static Dictionary<string, string> GetLinks()
         {
-            return parseAllDocsLinks(getDocsFilePath());
+            return ParseAllDocsLinks(GetDocsFilePath());
         }
 
-        internal static string[] getLinks(string filesPath)
+        internal static Dictionary<string, string> GetLinks(string filesPath)
         {
-            return parseAllDocsLinks(getDocsFilePath(filesPath));
+            return ParseAllDocsLinks(GetDocsFilePath(filesPath));
         }
 
-        private static string[] getDocsFilePath()
+        private static string[] GetDocsFilePath()
         {
-            return getDocsFilePath(Directory.GetCurrentDirectory());
+            return GetDocsFilePath(Directory.GetCurrentDirectory());
         }
 
-        private static string[] getDocsFilePath(string path)
+        private static string[] GetDocsFilePath(string path)
         {
             try
             {
@@ -51,24 +52,25 @@ namespace URG_Console
 
                 return wordFiles.ToArray();
             }
-            catch(DirectoryNotFoundException ex)
+            catch (DirectoryNotFoundException ex)
             {
+                //Console.SetOut(new ConsoleTextBoxWriter(txtConsolePipe));
                 Console.WriteLine(ex.Message + Environment.NewLine + "Cannot operate further." + Environment.NewLine + "Exiting...");
                 Environment.Exit(-99);
                 return new string[0];
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Console.WriteLine("[DocsParser] Unknown exception occured: ");
                 Console.WriteLine(ex.ToString());
                 return new string[0];
             }
-  
- 
+
+
         }
 
 
-        private static string[] parseAllDocsLinks(string[] files)
+        private static Dictionary<string, string> ParseAllDocsLinks(string[] files)
         {
 
             if (files == null)
@@ -79,6 +81,8 @@ namespace URG_Console
 
             // Parsing all links and hyperlinks in given docx file
             List<string> allLinks = new List<string>();
+            Dictionary<string, string> fileLinks = new Dictionary<string, string>();
+
 
             for (int i = 0; i < files.Count(); i++)
             {
@@ -87,10 +91,14 @@ namespace URG_Console
                     var doc = DocX.Load(files[i]);
 
                     // Creating predicate to further check if any Ukrinform links exists in the file
-                    Predicate<Xceed.Document.NET.Hyperlink> ukrLinks = hasUkrinformLinks;
+                    Predicate<Xceed.Document.NET.Hyperlink> ukrLinks = HasUkrinformLinks;
 
-                    if(!doc.Hyperlinks.Exists(ukrLinks) || doc.Hyperlinks.Count == 0)
+                    if (!doc.Hyperlinks.Exists(ukrLinks) || doc.Hyperlinks.Count == 0)
+                    {
+                        fileLinks.Add($"https://nolink.ukrinform{i}/", files[i]);
                         throw new MissingMemberException($"No Ukrinform links were found in the file!");
+                    }
+
 
                     // Checking if filename contains "1+[num]" in the beginning.
                     // It means that there are 1+someNum of articles in one file, which need to be parsed
@@ -103,14 +111,15 @@ namespace URG_Console
 
                         // Creating a hyperlink list of all Ukrinform links found in file
                         var ukrinformLinks = doc.Hyperlinks.FindAll(ukrLinks);
-                        
+
                         if (numOfAdditionalArticles + 1 > ukrinformLinks.Count)
                             throw new IndexOutOfRangeException($"Number of articles declared in the filename [1+{numOfAdditionalArticles}] is invalid!" + Environment.NewLine + "You have less article links in the file than declared!");
 
                         // Parsing declared number of articles
-                        for (int z = 0; z < ukrinformLinks.Count; z++) 
+                        for (int z = 0; z < ukrinformLinks.Count; z++)
                         {
-                                allLinks.Add(ukrinformLinks[z].Uri.ToString());
+                            //allLinks.Add(ukrinformLinks[z].Uri.ToString());
+                            fileLinks.Add(ukrinformLinks[z].Uri.ToString(), files[i]);
                         }
                     }
 
@@ -121,9 +130,11 @@ namespace URG_Console
                             try
                             {
                                 //Checking the first url in document and if it's related to Ukrinform. If not, then skip
-                                if (link.Uri == doc.Hyperlinks[0].Uri) {
+                                if (link.Uri == doc.Hyperlinks[0].Uri)
+                                {
                                     if (link.Uri?.ToString().Contains("ukrinform") ?? throw new NullReferenceException("Null URL was detected when tried to add first document hyperlink to the list!" + Environment.NewLine + "(You might have broken saved file. Try to modify, resave it and try again)"))
-                                        allLinks.Add(link.Uri.ToString());
+                                        //allLinks.Add(link.Uri.ToString());
+                                        fileLinks.Add(link.Uri.ToString(), files[i]);
                                 }
 
                             }
@@ -147,14 +158,15 @@ namespace URG_Console
                             }
                         }
                     }
-                   
-                }catch(IOException ex)
+
+                }
+                catch (IOException ex)
                 {
-                    killProcess("WINWORD");
+                    KillProcess("WINWORD");
                     Console.WriteLine(ex.Message);
                     Console.WriteLine("[DocsParser] *** Parsed documents cannot be open during the runtime. Run the program again... ***");
-                    Environment.Exit(-10);
-                    
+                    //Environment.Exit(-10);
+
                 }
                 catch (MissingMemberException ex)
                 {
@@ -183,14 +195,15 @@ namespace URG_Console
             }
 
             // Removing any duplicates, if occurred
-            var allLinksFiltered = allLinks.Distinct().ToArray();
-            Console.WriteLine($"\n[DocsParser] Successfully links parsed from documents: {allLinksFiltered.Length}");
+            //var allLinksFiltered = allLinks.Distinct().ToArray();
+            //var allLinksFiltered = allLinks.ToArray();
+            Console.WriteLine($"\n[DocsParser] Successfully links parsed from documents: {fileLinks.Count}");
 
-            return allLinksFiltered;
+            return fileLinks;
 
         }
 
-        private static bool hasUkrinformLinks(Xceed.Document.NET.Hyperlink link)
+        private static bool HasUkrinformLinks(Xceed.Document.NET.Hyperlink link)
         {
             if (link.Uri != null)
                 return link.Uri.ToString().Contains("ukrinform");
@@ -198,7 +211,7 @@ namespace URG_Console
                 throw new NullReferenceException("Null URL was detected when searched for Ukrinform links!" + Environment.NewLine + "(You might have broken saved file. Try to modify, resave it and try again)");
         }
 
-        private static void killProcess(string processName)
+        private static void KillProcess(string processName)
         {
             foreach (var process in Process.GetProcessesByName(processName))
             {
@@ -206,7 +219,6 @@ namespace URG_Console
             }
         }
 
-
-
     }
+
 }

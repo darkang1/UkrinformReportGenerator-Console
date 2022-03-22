@@ -1,109 +1,109 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Threading;
 using System.Xml.XPath;
 using HtmlAgilityPack;
+using System.ComponentModel;
+using System.IO;
 
 namespace URG_Console
 {
     internal class WebParser
     {
+        // Internal class variables
+        internal string ArticleDate { get; private set; } = "**.**.****";
+        internal string ArticleHeader { get; private set; } = "Unknown";
+        internal string ArticleType { get; private set; } = "N/A";
+        internal int ArticleChars { get; private set; } = 0;
+        internal string ArticleLink { get; private set; } = "https://nolink.ukrinform/";
+        internal bool ArticleExclusive { get; private set; } = false;
+        internal string ArticleFilePath { get; private set; } = String.Empty;
 
-        //enum ArticleType
-        //{
-        //    [Description("Інф. повідомлення")]
-        //    InfPovidom = 1,
-
-        //    [Description("Розш. інф. повідомлення")]
-        //    RozInfPovidom = 2,
-
-        //    [Description("Коментар")]
-        //    Comentar = 3,
-
-        //}
-
-        internal string articleDate { get; private set; } = "01.01.2000";
-        internal string articleHeader { get; private set; } = "Unknown";
-        internal string articleType { get; private set; } = "N/A";
-        internal int articleChars { get; private set; } = 0;
-        internal string articleLink { get; private set; } = "https://None";
-        internal bool articleExclusive { get; private set; } = false;
-
-
-        //private WebParser()
-        //{
-        //    //If link wasn't parsed successfuly, creating a 'default' article
-        //}
-
-        private WebParser(string date = "01.01.2000", string header = "Unknown", string type = "N/A", int chars = 0, string link = "https://None", bool exclusive = false)
+        public WebParser(string date = "**.**.****", string header = "Unknown", string type = "N/A", int chars = 0, string link = "https://nolink.ukrinform/", bool exclusive = false, string filePath = "")
         {
-            articleDate = date;
-            articleHeader = header;
-            articleType = type;
-            articleChars = chars;
-            articleLink = link;
-            articleExclusive = exclusive;
+            ArticleDate = date;
+            ArticleHeader = header;
+            ArticleType = type;
+            ArticleChars = chars;
+            ArticleLink = link;
+            ArticleExclusive = exclusive;
+            ArticleFilePath = filePath;
         }
 
-
-        internal static List<WebParser> webParser(string[] links)
+        internal static List<WebParser> ParseArticles(Dictionary<string, string> fileLinks)
         {
-            Console.OutputEncoding = Encoding.UTF8;
             Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("uk-UA");
-           
-            if (links == null || links.Length == 0)
+
+            if (fileLinks == null || fileLinks.Count == 0)
                 Console.WriteLine("\n[WebParser] No links were passed to the parser!");
             else
                 Console.WriteLine("[WebParser] Links loaded successfully!");
 
-            WebParser[] articles = new WebParser[links.Length];
+            WebParser[] articles = new WebParser[fileLinks.Count];
 
-            for (int i = 0; i < links.Length; i++)
+            for (int i = 0; i < fileLinks.Count; i++)
             {
-                try {
-                    
-                HtmlWeb web = new HtmlWeb();
-                HtmlDocument doc = web.Load(links[i]);
-                string newsTitle = doc.DocumentNode.SelectSingleNode("//h1[@class='newsTitle']")?.InnerText ?? "Unknown";
-                string publishDate = doc.DocumentNode.SelectSingleNode("//time[@datetime]")?.InnerText.ToString() ?? "01.01.2000 ";
-                HtmlNode[] newsText = doc.DocumentNode.SelectNodes("//div[@class='newsText']")?.ToArray() ?? throw new XPathException("Text body token is missing. Cannot obtain any text"); // Couldn't find a way to work with null-coalescing operator (??), so simply throw an exception
-                bool newsExclusive = doc.DocumentNode.SelectSingleNode("//div[@class='newsPrefix']")?.InnerText == "Ексклюзив" ? true : false;
-                string newsLink = links[i];
-
-                // Removing timestamp from full publish date
-                string fixedDate = publishDate?.Substring(0, publishDate.LastIndexOf(" ")); 
-
-                // Removing useless banners, such as 'Читайте також'
-                var uselessBanners = doc.DocumentNode.SelectNodes("//section[@class='read']");
-
-                if (uselessBanners != null)
+                try
                 {
-                    foreach (var item in uselessBanners)
+
+                    HtmlWeb web = new HtmlWeb();
+
+                    if (fileLinks.ElementAt(i).Key.Contains("https://nolink.ukrinform"))
                     {
-                        item.Remove();
+                        throw new HtmlWebException("A file with no link was passed to WebParser!");
                     }
-                }
 
-                // Replacing HTML tags in the article's title with proper symbols
-                newsTitle = newsTitle.Replace("&ndash;", "-").Replace("&laquo;", "\"").Replace("&raquo;", "\"").Replace("&rsquo;", "'").Replace("&nbsp;", " ").Replace("&#039;", "'").Replace("&amp;", "&");
+                    HtmlDocument doc = web.Load(fileLinks.ElementAt(i).Key);
 
-                string finalText = newsTitle + Environment.NewLine + fixedDate + Environment.NewLine;
+                    //string newsTitle1 = doc.DocumentNode.SelectSingleNode("//h1[@class='newsTitle']")?.InnerText ?? "Unknown";
+                    //string publishDate = doc.DocumentNode.SelectSingleNode("//time[@datetime]")?.InnerText.ToString() ?? "01.01.2000 ";
 
-                // Replacing HTML tags in the article's body with proper symbols and saving result to final string
-                for (int j = 0; j < newsText.Count(); j++)
-                {
-                    finalText += newsText[j].InnerText.Replace("&ndash;", "-").Replace("&laquo;", "\"").Replace("&raquo;", "\"").Replace("&rsquo;", "'").Replace("&nbsp;", " ").Replace("&#039;", "'").Replace("&amp;", "&");
-                }
+                    string newsTitle = "";
+                    HtmlNode[] newsTitlesArray = doc.DocumentNode.SelectNodes("//h1[@class='newsTitle'] | //div[@class='firstTitle']")?.ToArray() ?? throw new XPathException("Title body node is missing. Cannot obtain any text");
+                    // Replacing HTML tags in the article's title with proper symbols
+                    for (int j = 0; j < newsTitlesArray.Count(); j++)
+                        newsTitle += newsTitlesArray[j].InnerText.Replace("&ndash;", "-").Replace("&laquo;", "\"").Replace("&raquo;", "\"").Replace("&rsquo;", "'").Replace("&nbsp;", " ").Replace("&#039;", "'").Replace("&amp;", "&").Trim();
 
-                // Counting number of non-white space chars in text
-                int textCharsAmount = countNonWhiteSpaceChars(finalText);
+                    string publishDate = "";
+                    HtmlNode[] publishDateArray = doc.DocumentNode.SelectNodes("//time[@datetime] | //div[@class='firstDate']")?.ToArray() ?? throw new XPathException("Date body node is missing. Cannot obtain any text");
+                    publishDate += publishDateArray[0].InnerText.Trim();
 
-                // Setting article type
-                string newsType = "Undefined";
+                    HtmlNode[] newsText = doc.DocumentNode.SelectNodes("//div[@class='newsText'] | //div[@class='interviewText']")?.ToArray() ?? throw new XPathException("Text body node is missing. Cannot obtain any text"); // Couldn't find a way to work with null-coalescing operator (??), so simply throw an exception
+                    bool newsExclusive = doc.DocumentNode.SelectSingleNode("//div[@class='newsPrefix']")?.InnerText == "Ексклюзив" ? true : false;
+                    string newsLink = fileLinks.ElementAt(i).Key;
+
+                    string newsLinkFilePath = fileLinks.ElementAt(i).Value;
+
+                    // Removing timestamp from full publish date
+                    string fixedDate = publishDate?.Substring(0, publishDate.LastIndexOf(" "));
+
+                    // Removing useless banners, such as 'Читайте також'
+                    var uselessBanners = doc.DocumentNode.SelectNodes("//section[@class='read']");
+
+                    if (uselessBanners != null)
+                    {
+                        foreach (var item in uselessBanners)
+                        {
+                            item.Remove();
+                        }
+                    }
+
+                    string finalText = newsTitle + Environment.NewLine + fixedDate + Environment.NewLine;
+
+                    // Replacing HTML tags in the article's body with proper symbols and saving result to final string
+                    for (int j = 0; j < newsText.Count(); j++)
+                    {
+                        finalText += newsText[j].InnerText.Replace("&ndash;", "-").Replace("&laquo;", "\"").Replace("&raquo;", "\"").Replace("&rsquo;", "'").Replace("&nbsp;", " ").Replace("&#039;", "'").Replace("&amp;", "&");
+                    }
+
+                    // Counting number of non-white space chars in text
+                    int textCharsAmount = CountNonWhiteSpaceChars(finalText);
+
+                    // Setting article type
+                    string newsType = "Undefined";
                     if (textCharsAmount > 0 && textCharsAmount < 1400)
                         newsType = "Інф. повідомлення";
                     else if (textCharsAmount >= 1400 && textCharsAmount < 5000)
@@ -112,20 +112,21 @@ namespace URG_Console
                         newsType = "Коментар";
                     else
                         newsType = "Error";
-    
-                // Creating article object with all parsed data
-                articles[i] = new WebParser(fixedDate, newsTitle, newsType, textCharsAmount, newsLink, newsExclusive);
-                Console.WriteLine($"Total processed links: [{i + 1}/{links.Length}]");
+
+                    // Creating article object with all parsed data
+                    articles[i] = new WebParser(fixedDate, newsTitle, newsType, textCharsAmount, newsLink, newsExclusive, newsLinkFilePath);
+                    Console.WriteLine($"Total processed links: [{i + 1}/{fileLinks.Count}]");
 
                 }
-                catch(HtmlWebException ex)
+                catch (HtmlWebException ex)
                 {
-                    Console.WriteLine("[WebParser] " + ex.Message);
-                    articles[i] = new WebParser(link: links[i]);
+                    Console.WriteLine($"[WebParser] File: {Path.GetFileName(fileLinks.ElementAt(i).Value)}");
+                    Console.WriteLine(ex.Message);
+                    articles[i] = new WebParser(link: fileLinks.ElementAt(i).Key, filePath: fileLinks.ElementAt(i).Value);
                 }
                 catch (XPathException ex)
                 {
-                    Console.WriteLine($"[WebParser] At link: {links[i]}");
+                    Console.WriteLine($"[WebParser] At link: {fileLinks.ElementAt(i).Key}");
                     Console.WriteLine(ex.Message);
                     Console.WriteLine("Skipping to the next article...");
                     articles[i] = new WebParser();
@@ -138,10 +139,10 @@ namespace URG_Console
             }
 
             return articles.ToList();
-            
+
         }
 
-        private static int countNonWhiteSpaceChars(string text)
+        private static int CountNonWhiteSpaceChars(string text)
         {
             int result = 0;
             foreach (char c in text)
