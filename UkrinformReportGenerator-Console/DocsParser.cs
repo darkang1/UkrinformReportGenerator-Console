@@ -151,7 +151,7 @@ namespace URG_Console
                             {
                                 Console.WriteLine($"[DocsParser] File: {Path.GetFileName(files[i])}");
                                 Console.WriteLine("[DocsParser] Unhandled exception occured: ");
-                                Console.WriteLine(ex.ToString());
+                                Console.WriteLine(ex.Message);
                                 Console.WriteLine("Skipping file...");
                                 break;
                             }
@@ -193,9 +193,6 @@ namespace URG_Console
                 }
             }
 
-            // Removing any duplicates, if occurred
-            //var allLinksFiltered = allLinks.Distinct().ToArray();
-            //var allLinksFiltered = allLinks.ToArray();
             Console.WriteLine($"\n[DocsParser] Successfully links parsed from documents: {fileLinks.Count}");
 
             return fileLinks;
