@@ -123,7 +123,7 @@ namespace URG_Console
                     Console.WriteLine($"[WebParser] At link: {fileLinks.ElementAt(i).Key}");
                     Console.WriteLine(ex.Message);
                     Console.WriteLine("Skipping to the next article...");
-                    articles[i] = new WebParser();
+                    articles[i] = new WebParser(link: fileLinks.ElementAt(i).Key, filePath: fileLinks.ElementAt(i).Value);
                 }
                 catch (Exception ex)
                 {
