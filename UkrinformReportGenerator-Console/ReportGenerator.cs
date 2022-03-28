@@ -227,20 +227,20 @@ namespace URG_Console
             Console.WriteLine($"Current year: {_currYear}");
         }
 
-        private int GetCurrentMonthWeekNumber()
+        private int GetCurrentMonthNumber()
         {
             DateTime date = DateTime.Today;
             DateTime firstMonthDay = new DateTime(date.Year, date.Month, 1);
-            DateTime firstMonthMonday = firstMonthDay.AddDays((DayOfWeek.Monday + 7 - firstMonthDay.DayOfWeek) % 7);
-            // Decided to go with Wednesday as starting point for counting month week number 
-            DateTime firstMonthWednesday = firstMonthDay.AddDays((DayOfWeek.Wednesday + 7 - firstMonthDay.DayOfWeek) % 7);
+            // Decided to go with Thursday as starting point for counting month week number 
+            DateTime firstMonthThursday = firstMonthDay.AddDays((DayOfWeek.Thursday + 7 - firstMonthDay.DayOfWeek) % 7);
+            DateTime currentWeekMonday = DateTimeExtensions.FirstDayOfWeek(date);
 
-            if (firstMonthWednesday > date)
+            if (firstMonthThursday > date)
             {
                 firstMonthDay = firstMonthDay.AddMonths(-1);
-                firstMonthWednesday = firstMonthDay.AddDays((DayOfWeek.Wednesday + 7 - firstMonthDay.DayOfWeek) % 7);
+                firstMonthThursday = firstMonthDay.AddDays((DayOfWeek.Thursday + 7 - firstMonthDay.DayOfWeek) % 7);
             }
-            int weekNum = (int)Math.Round((date - firstMonthWednesday).Days / 7.0) + 1;
+            int weekNum = (int)Math.Round((currentWeekMonday - firstMonthThursday).Days / 7.0) + 1;
             return weekNum;
         }
 
@@ -285,7 +285,7 @@ namespace URG_Console
 
             // Creating a proper filename which contains full path
             string fp = Path.GetFullPath(_folderPath);
-            string fn = Path.GetFileName($@"\AUTO_Dovgopol_{_currYear}_{fileMonthDate}_{ArabicToRoman(GetCurrentMonthWeekNumber())}={_parsedArticles.Count}.docx");
+            string fn = Path.GetFileName($@"\AUTO_Dovgopol_{_currYear}_{fileMonthDate}_{ArabicToRoman(GetCurrentMonthNumber())}={_parsedArticles.Count}.docx");
             string fileName = Path.Combine(fp, fn);
 
             try
