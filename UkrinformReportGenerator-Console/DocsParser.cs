@@ -62,14 +62,10 @@ namespace URG_Console
                 Console.WriteLine(ex.ToString());
                 return new string[0];
             }
-
-
         }
-
 
         private static Dictionary<string, string> ParseAllDocsLinks(string[] files)
         {
-
             if (files == null)
             {
                 Console.WriteLine("Null value was passed to DocsParser");
@@ -79,7 +75,6 @@ namespace URG_Console
             // Parsing all links and hyperlinks in given docx file
             List<string> allLinks = new List<string>();
             Dictionary<string, string> fileLinks = new Dictionary<string, string>();
-
 
             for (int i = 0; i < files.Count(); i++)
             {
@@ -95,7 +90,6 @@ namespace URG_Console
                         fileLinks.Add($"https://nolink.ukrinform{i}/", files[i]);
                         throw new MissingMemberException($"No Ukrinform links were found in the file!");
                     }
-
 
                     // Checking if filename contains "1+[num]" in the beginning.
                     // It means that there are 1+someNum of articles in one file, which need to be parsed
@@ -119,7 +113,6 @@ namespace URG_Console
                             fileLinks.Add(ukrinformLinks[z].Uri.ToString(), files[i]);
                         }
                     }
-
                     else
                     {
                         foreach (var link in doc.Hyperlinks)
@@ -190,11 +183,8 @@ namespace URG_Console
                     Console.WriteLine(ex.ToString());
                 }
             }
-
             Console.WriteLine($"\n[DocsParser] Successfully links parsed from documents: {fileLinks.Count}");
-
             return fileLinks;
-
         }
 
         private static bool HasUkrinformLinks(Xceed.Document.NET.Hyperlink link)

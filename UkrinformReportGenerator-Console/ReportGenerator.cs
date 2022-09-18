@@ -59,8 +59,6 @@ namespace URG_Console
             _parsedArticles = WebParser.ParseArticles(fileLinks);
 
             // Sorting parsed articles
-            // For some ridiculous, unknown reason sometimes one function sorts properly, sometimes the other
-            // So switch sorting function when needed
             SortParsedArticlesByLINQ();
             //sortParsedArticlesByDelegate();
 
@@ -75,12 +73,10 @@ namespace URG_Console
             Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("uk-UA");
 
             DateTime todaysDate = DateTime.Today;
-
             string thisWeekStart = todaysDate.FirstDayOfWeek().ToShortDateString();
             string thisWeekEnd = todaysDate.LastDayOfWeek().ToShortDateString();
 
             TrimAndSetDate(thisWeekStart, thisWeekEnd);
-
         }
 
         private void TrimAndSetDate(string startDay, string endDay)
@@ -111,7 +107,6 @@ namespace URG_Console
                 Console.WriteLine("[ReportGenerator] " + ex.Message);
                 Console.WriteLine("Error occured during setting date. Need to set date manually in the report");
             }
-
         }
 
         private void SetHeader()
@@ -140,8 +135,6 @@ namespace URG_Console
                 Console.WriteLine(ex.ToString());
                 Console.WriteLine("Need to set header manually in the report");
             }
-
-
         }
 
 
@@ -149,10 +142,7 @@ namespace URG_Console
         {
             // Sorting list using LINQ query
             if (_parsedArticles != null)
-            {
-                _parsedArticles.OrderBy(article => article.ArticleDate).ThenBy(article => article.ArticleDate);
-            }
-
+                _parsedArticles = _parsedArticles.OrderBy(article => article.ArticleDate).ToList();
         }
 
         private void SortParsedArticlesByDelegate()
@@ -168,6 +158,19 @@ namespace URG_Console
 
         }
 
+       
+        internal void DisplayHeader()
+        {
+            Console.WriteLine(_header);
+        }
+
+        internal void DisplayDate()
+        {
+            Console.WriteLine($"Current week start day: {_weekStartDay}");
+            Console.WriteLine($"Current week end day: {_weekEndDay}");
+            Console.WriteLine($"Current month: {_currMonthEnum}");
+            Console.WriteLine($"Current year: {_currYear}");
+        }
 
         internal void DisplayParsedArtiles()
         {
@@ -202,30 +205,15 @@ namespace URG_Console
 
                     }
                     Console.WriteLine($"Total of unsuccessful connections: {_unsuccessfulConnections}");
-
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine("[ReportGenerator] " + ex.Message);
                     Console.WriteLine("Skipping...");
                 }
-
             }
-
         }
 
-        internal void DisplayHeader()
-        {
-            Console.WriteLine(_header);
-        }
-
-        internal void DisplayDate()
-        {
-            Console.WriteLine($"Current week start day: {_weekStartDay}");
-            Console.WriteLine($"Current week end day: {_weekEndDay}");
-            Console.WriteLine($"Current month: {_currMonthEnum}");
-            Console.WriteLine($"Current year: {_currYear}");
-        }
 
         private int GetCurrentMonthNumber()
         {
@@ -251,7 +239,6 @@ namespace URG_Console
                 {1, "I" }, {2, "II"}, {3, "III"}, {4, "IV"}, {5, "V"}};
 
             string answer = String.Empty;
-
             try
             {
                 if (romanNums.ContainsKey(num))
@@ -266,9 +253,8 @@ namespace URG_Console
             catch (ArgumentOutOfRangeException ex)
             {
                 Console.WriteLine("[ReportGenerator] " + ex.Message);
-                return "0";
+                return "I";
             }
-
         }
 
 

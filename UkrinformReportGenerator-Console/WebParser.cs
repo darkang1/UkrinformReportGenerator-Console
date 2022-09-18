@@ -131,9 +131,7 @@ namespace URG_Console
                     Console.WriteLine(ex.ToString());
                 }
             }
-
             return articles.ToList();
-
         }
 
         private static int CountNonWhiteSpaceChars(string text)
@@ -142,14 +140,9 @@ namespace URG_Console
             foreach (char c in text)
             {
                 if (!char.IsWhiteSpace(c))
-                {
                     result++;
-                }
             }
             return result;
         }
-
-
-
     }
 }

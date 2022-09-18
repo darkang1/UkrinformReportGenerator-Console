@@ -14,9 +14,9 @@ namespace URG_Console
             Thread.CurrentThread.CurrentCulture = new CultureInfo("uk-UA", false);
             Thread.CurrentThread.CurrentUICulture = new CultureInfo("uk-UA", false);
 
-            clearLicenseMsg();
+            ClearLicenseMsg();
 
-            string hardcodedPath = @"C:\Users\Neo\Desktop\New folder";
+            string hardcodedPath = @"C:\Users\Neo\Desktop\Weekly";
 
             Console.WriteLine("=======Ukrinform Report Generator=======");
             Console.WriteLine("Select folder location mode:\n");
@@ -61,7 +61,7 @@ namespace URG_Console
 
         }
 
-        public static void clearLicenseMsg()
+        public static void ClearLicenseMsg()
         {
             // Doing this to trigger DocX free license message in console to clear it
             try
@@ -69,9 +69,6 @@ namespace URG_Console
                 DocX.Load((string)null);
             }
             catch (Exception ex) { Console.Clear(); }
-
         }
-
     }
-
 }
