@@ -37,7 +37,7 @@ namespace URG_Console
             if (fileLinks == null || fileLinks.Count == 0)
                 Console.WriteLine("\n[WebParser] No links were passed to the parser!");
             else
-                Console.WriteLine("[WebParser] Links loaded successfully!");
+                Console.WriteLine("\n[WebParser] Links loaded successfully!");
 
             WebParser[] articles = new WebParser[fileLinks.Count];
 

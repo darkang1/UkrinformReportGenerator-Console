@@ -47,7 +47,6 @@ namespace URG_Console
                         i--;
                     }
                 }
-
                 return wordFiles.ToArray();
             }
             catch (DirectoryNotFoundException ex)
@@ -67,15 +66,9 @@ namespace URG_Console
         private static Dictionary<string, string> ParseAllDocsLinks(string[] files)
         {
             if (files == null)
-            {
-                Console.WriteLine("Null value was passed to DocsParser");
-                throw new ArgumentNullException();
-            }
+                throw new ArgumentNullException("Null value was passed to DocsParser!");
 
-            // Parsing all links and hyperlinks in given docx file
-            List<string> allLinks = new List<string>();
             Dictionary<string, string> fileLinks = new Dictionary<string, string>();
-
             for (int i = 0; i < files.Count(); i++)
             {
                 try
@@ -94,7 +87,7 @@ namespace URG_Console
                     // Checking if filename contains "1+[num]" in the beginning.
                     // It means that there are 1+someNum of articles in one file, which need to be parsed
                     string fileName = Path.GetFileName(files[i]);
-                    if (fileName != null && fileName.Contains("1+"))
+                    if (fileName.Contains("1+"))
                     {
                         // Checking number between '+' and '_' symbols in the filename
                         // Ex: 1+5_USA.docx
@@ -109,46 +102,33 @@ namespace URG_Console
                         // Parsing declared number of articles
                         for (int z = 0; z < ukrinformLinks.Count; z++)
                         {
-                            //allLinks.Add(ukrinformLinks[z].Uri.ToString());
-                            fileLinks.Add(ukrinformLinks[z].Uri.ToString(), files[i]);
+                            if (!fileLinks.TryAdd(ukrinformLinks[z].Uri.ToString(), files[i]))
+                            {
+                                fileLinks.TryGetValue(ukrinformLinks[z].Uri.ToString(), out string sameLinkFile);
+                                sameLinkFile = Path.GetFileName(sameLinkFile);
+                                throw new InvalidDataException($"Same link has been already seen in another file! ({sameLinkFile})");
+                            }
                         }
                     }
                     else
                     {
-                        foreach (var link in doc.Hyperlinks)
+                        //Checking the first url in document and if it's related to Ukrinform. If not, then skip
+                        var firstLink = doc.Hyperlinks[0];
+                        if (firstLink.Uri?.ToString().Contains("ukrinform") ?? throw new NullReferenceException("Null URL was detected when tried to add first document hyperlink to the list!" + Environment.NewLine + "(You might have broken saved file. Try to modify, resave it and try again)"))
                         {
-                            try
+                            if (!fileLinks.TryAdd(firstLink.Uri.ToString(), files[i]))
                             {
-                                //Checking the first url in document and if it's related to Ukrinform. If not, then skip
-                                if (link.Uri == doc.Hyperlinks[0].Uri)
-                                {
-                                    if (link.Uri?.ToString().Contains("ukrinform") ?? throw new NullReferenceException("Null URL was detected when tried to add first document hyperlink to the list!" + Environment.NewLine + "(You might have broken saved file. Try to modify, resave it and try again)"))
-                                        //allLinks.Add(link.Uri.ToString());
-                                        fileLinks.Add(link.Uri.ToString(), files[i]);
-                                }
-
-                            }
-                            catch (NullReferenceException ex)
-                            {
-                                // We have another instance of NullReferenceException handler here, since it's possible to have more than 1 NULL link in the file (usually 3).
-                                // So not to cycle through all of them we simply break out of the current loop and moving forward to the next file.
-                                // Usually having NULL links in file Hyperlinks list allegedly means we have a broken saved file (?) which needs to be resaved in order to fix this issue.
-                                Console.WriteLine($"[DocsParser] File: {Path.GetFileName(files[i])}");
-                                Console.WriteLine(ex.Message);
-                                Console.WriteLine("Skipping file...");
-                                break;
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"[DocsParser] File: {Path.GetFileName(files[i])}");
-                                Console.WriteLine("[DocsParser] Unhandled exception occured: ");
-                                Console.WriteLine(ex.Message);
-                                Console.WriteLine("Skipping file...");
-                                break;
-                            }
+                                fileLinks.TryGetValue(firstLink.Uri.ToString(), out string sameLinkFile);
+                                sameLinkFile = Path.GetFileName(sameLinkFile);
+                                throw new InvalidDataException($"Same link has been already seen in another file! ({sameLinkFile})");
+                            }                               
                         }
+                        else
+                        {
+                            fileLinks.Add($"https://nolink.ukrinform{i}/", files[i]);
+                            throw new MissingMemberException($"First hyperlink is not Ukrinform related!");
+                        }                           
                     }
-
                 }
                 catch (IOException ex)
                 {
@@ -176,11 +156,18 @@ namespace URG_Console
                     Console.WriteLine(ex.Message);
                     Console.WriteLine("Skipping file...");
                 }
+                catch(InvalidDataException ex)
+                {
+                    Console.WriteLine($"[DocsParser] File: {Path.GetFileName(files[i])}");
+                    Console.WriteLine(ex.Message);
+                    Console.WriteLine("Skipping file...");
+                }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[DocsParser] File: {Path.GetFileName(files[i])}");
-                    Console.WriteLine("[DocsParser] Unhandled exception occured: ");
-                    Console.WriteLine(ex.ToString());
+                    Console.WriteLine("Unhandled exception occured: ");
+                    Console.WriteLine(ex.Message);
+                    Console.WriteLine("Skipping file...");
                 }
             }
             Console.WriteLine($"\n[DocsParser] Successfully links parsed from documents: {fileLinks.Count}");
