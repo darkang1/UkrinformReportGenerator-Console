@@ -142,7 +142,10 @@ namespace URG_Console
         {
             // Sorting list using LINQ query
             if (_parsedArticles != null)
-                _parsedArticles = _parsedArticles.OrderBy(article => DateTime.TryParse(article.ArticleDate, out DateTime dt)).ToList();
+                _parsedArticles = _parsedArticles.OrderBy(article =>
+                    { DateTime.TryParse(article.ArticleDate, out DateTime dt);
+                        return dt;
+                    }).ToList();
         }
 
         private void SortParsedArticlesByDelegate()
