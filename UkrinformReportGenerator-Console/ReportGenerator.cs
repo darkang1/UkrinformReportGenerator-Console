@@ -64,19 +64,52 @@ namespace URG_Console
 
             DisplayParsedArtiles();
 
-            // Generating final Word report with all obtained and processed data
+            // Generating regular and extended Word reports with all obtained and processed data
             GenerateMSWordReport();
+            GenerateMSWordReport(isExtended: true);
+        }
+
+        private DateTime GetNextWeekday(DateTime start, DayOfWeek day)
+        {
+            // To get next weekday value potentially exluding today's date if this a case
+            start = start.AddDays(1);
+            // The (... + 7) % 7 ensures we end up with a value in the range [0, 6]
+            int daysToAdd = ((int)day - (int)start.DayOfWeek + 7) % 7;
+
+            return start.AddDays(daysToAdd);
+        }
+
+        private DateTime GetPreviousWeekday(DateTime start, DayOfWeek day)
+        {
+            // To get previous weekday value potentially excluding today's date if this is the case
+            start = start.AddDays(-1);
+            // The (... + 7) % 7 ensures we end up with a value in the range [0, 6]
+            int daysToSubtract = ((int)start.DayOfWeek - (int)day + 7) % 7;
+
+            return start.AddDays(-daysToSubtract);
+        }
+
+        private DateTime GetDayOfCurrentWeek(DayOfWeek dayOfWeek)
+        {
+            var date = DateTime.Now;
+            if (date.DayOfWeek != dayOfWeek)
+            {
+                var direction = date.DayOfWeek > dayOfWeek ? -1D : 1D;
+                do
+                {
+                    date = date.AddDays(direction);
+                } while (date.DayOfWeek != dayOfWeek);
+            }
+            return date;
         }
 
         private void SetCurrDate()
         {
-            Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("uk-UA");
-
             DateTime todaysDate = DateTime.Today;
-            string thisWeekStart = todaysDate.FirstDayOfWeek().ToShortDateString();
-            string thisWeekEnd = todaysDate.LastDayOfWeek().ToShortDateString();
+            string reportWeekStartDate = GetPreviousWeekday(todaysDate.FirstDayOfWeek(), DayOfWeek.Thursday).ToShortDateString();
+            string reportWeekEndDate = GetDayOfCurrentWeek(DayOfWeek.Thursday).ToShortDateString();
 
-            TrimAndSetDate(thisWeekStart, thisWeekEnd);
+            TrimAndSetDate(reportWeekStartDate, reportWeekEndDate);
         }
 
         private void TrimAndSetDate(string startDay, string endDay)
@@ -261,7 +294,7 @@ namespace URG_Console
         }
 
 
-        private void GenerateMSWordReport()
+        private void GenerateMSWordReport(bool isExtended = false)
         {
             // Initializing parsedArticles just in case if forgotted, to not to crash the application on this stage
             if (_parsedArticles == null)
@@ -274,7 +307,7 @@ namespace URG_Console
 
             // Creating a proper filename which contains full path
             string fp = Path.GetFullPath(_folderPath);
-            string fn = Path.GetFileName($@"\AUTO_Dovgopol_{_currYear}_{fileMonthDate}_{ArabicToRoman(GetCurrentMonthNumber())}={_parsedArticles.Count}.docx");
+            string fn = isExtended == false ? Path.GetFileName($@"\AUTO_Dovgopol_{_currYear}_{fileMonthDate}_{ArabicToRoman(GetCurrentMonthNumber())}={_parsedArticles.Count}.docx") : Path.GetFileName($@"\AUTO_Dovgopol_{_currYear}_{fileMonthDate}_{ArabicToRoman(GetCurrentMonthNumber())}={_parsedArticles.Count}_Extended.docx");
             string fileName = Path.Combine(fp, fn);
 
             try
@@ -375,13 +408,32 @@ namespace URG_Console
                             // Adding title
                             else if (j == 2)
                             {
-                                if (i - 1 < hyperlinks.Length) // Checking that amount of links <= amount of rows. If there are more rows, skip them
-                                    if (hyperlinks[i - 1] != null)
+                                // Checking that amount of links <= amount of rows. If there are more rows, skip them
+                                if (i - 1 < hyperlinks.Length && hyperlinks[i - 1] != null)
+                                {
+                                    if(isExtended == false)
+                                    {
                                         t.Rows[i].Cells[j].Paragraphs.Last().AppendHyperlink(hyperlinks[i - 1]).
-                                                                                     //Setting color
-                                                                                     Color(Color.Blue).
-                                                                                     // Setting text underline
-                                                                                     UnderlineStyle(UnderlineStyle.singleLine);
+                                            //Setting color
+                                            Color(Color.Blue).
+                                            // Setting text underline
+                                            UnderlineStyle(UnderlineStyle.singleLine);
+                                    }
+                                    else
+                                    {
+                                        string originalHyperlinkText = hyperlinks[i - 1].Text;
+                                        t.Rows[i].Cells[j].Paragraphs.Last().Append(originalHyperlinkText);
+                                        
+                                        Hyperlink extendedHyperLink = hyperlinks[i - 1];
+                                        extendedHyperLink.Text = hyperlinks[i - 1].Uri.ToString();
+
+                                        t.Rows[i].Cells[j].Paragraphs.Last().AppendLine().AppendHyperlink(extendedHyperLink).
+                                            //Setting color
+                                            Color(Color.Blue).
+                                            // Setting text underline
+                                            UnderlineStyle(UnderlineStyle.singleLine);
+                                    }
+                                } 
                             }
 
                             // Adding article type
