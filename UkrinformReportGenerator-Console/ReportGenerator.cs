@@ -43,12 +43,17 @@ namespace URG_Console
 
         private string _folderPath { get; set; } = String.Empty;
 
+        private DayOfWeek _reportStartEndDay { get; set; } = DayOfWeek.Thursday;
+
         private List<WebParser> _parsedArticles = new List<WebParser>();
 
         public ReportGenerator(string folderPath)
         {
 
             _folderPath = folderPath;
+
+            // Setting default report startring and ending day of the week
+            _reportStartEndDay = DayOfWeek.Thursday;
 
             // Setting current date, including week beginnig and endning dates for the report header and filename
             SetCurrDate();
@@ -94,7 +99,8 @@ namespace URG_Console
             var date = DateTime.Now;
             if (date.DayOfWeek != dayOfWeek)
             {
-                var direction = date.DayOfWeek > dayOfWeek ? -1D : 1D;
+                // Checking additionaly for DayOfWeek == 0 because in enum values week begins with Sunday (0)
+                var direction = date.DayOfWeek > dayOfWeek || date.DayOfWeek == 0 ? -1D : 1D;
                 do
                 {
                     date = date.AddDays(direction);
@@ -106,8 +112,8 @@ namespace URG_Console
         private void SetCurrDate()
         {
             DateTime todaysDate = DateTime.Today;
-            string reportWeekStartDate = GetPreviousWeekday(todaysDate.FirstDayOfWeek(), DayOfWeek.Thursday).ToShortDateString();
-            string reportWeekEndDate = GetDayOfCurrentWeek(DayOfWeek.Thursday).ToShortDateString();
+            string reportWeekStartDate = GetPreviousWeekday(todaysDate.FirstDayOfWeek(), _reportStartEndDay).ToShortDateString();
+            string reportWeekEndDate = GetDayOfCurrentWeek(_reportStartEndDay).ToShortDateString();
 
             TrimAndSetDate(reportWeekStartDate, reportWeekEndDate);
         }
