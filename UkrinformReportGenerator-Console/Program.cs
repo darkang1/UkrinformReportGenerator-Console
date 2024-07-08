@@ -2,73 +2,147 @@
 using System.Globalization;
 using System.Text;
 using System.Threading;
+using System.IO;
+using Microsoft.Extensions.Configuration;
 using Xceed.Words.NET;
 
 namespace URG_Console
 {
     class Program
     {
+        private static string DefaultPath;
+        private static readonly DayOfWeek ReportEndDay = DayOfWeek.Sunday;
+
         static void Main(string[] args)
+        {
+            InitializeEnvironment();
+            ClearLicenseMsg();
+            RunReportGenerator();
+        }
+
+        private static void InitializeEnvironment()
         {
             Console.OutputEncoding = Encoding.UTF8;
             Thread.CurrentThread.CurrentCulture = new CultureInfo("uk-UA", false);
             Thread.CurrentThread.CurrentUICulture = new CultureInfo("uk-UA", false);
 
-            ClearLicenseMsg();
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
 
-            string hardcodedPath = @"C:\Users\Neo\Desktop\Weekly";
+            DefaultPath = string.IsNullOrWhiteSpace(configuration["DefaultPath"]) ? "Not specified in appsettings.json" : configuration["DefaultPath"];
+        }
 
+        private static void RunReportGenerator()
+        {
             Console.WriteLine("=======Ukrinform Report Generator=======");
-            Console.WriteLine("Select folder location mode:\n");
-            Console.WriteLine("1. Use hardcoded location");
-            Console.WriteLine($"({hardcodedPath})");
-            Console.WriteLine("2. Manually specify folder path");
+            (DateTime reportStartDate, DateTime reportEndDate) = SelectOperatingWeek();
+            string folderPath = SelectFolderLocation();
 
-            int consoleInput = -1;
-            bool isValidInput = false;
+            Console.WriteLine();
+            _ = new ReportGenerator(folderPath, reportStartDate, reportEndDate, ReportEndDay);
+        }
+
+        private static (DateTime startDate, DateTime endDate) SelectOperatingWeek()
+        {
+            DateTime today = DateTime.Today;
+            DateTime currentWeekEnd = GetCurrentWeekEndDay(today, ReportEndDay);
+            DateTime currentWeekStart = currentWeekEnd.AddDays(-6);
+            DateTime previousWeekEnd = currentWeekEnd.AddDays(-7);
+            DateTime previousWeekStart = previousWeekEnd.AddDays(-6);
+
+            Console.WriteLine("Select operating week:");
+            Console.WriteLine($"1. Current week ({currentWeekStart:dd.MM.yyyy} - {currentWeekEnd:dd.MM.yyyy})");
+            Console.WriteLine($"2. Previous week ({previousWeekStart:dd.MM.yyyy} - {previousWeekEnd:dd.MM.yyyy})");
+
+            while (true)
+            {
+                Console.Write("> ");
+                if (int.TryParse(Console.ReadLine(), out int choice))
+                {
+                    switch (choice)
+                    {
+                        case 1:
+                            return (currentWeekStart, currentWeekEnd);
+                        case 2:
+                            return (previousWeekStart, previousWeekEnd);
+                        default:
+                            Console.WriteLine("Invalid input! Try again");
+                            break;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Invalid input! Try again");
+                }
+            }
+        }
+
+        private static DateTime GetCurrentWeekEndDay(DateTime start, DayOfWeek endDay)
+        {
+            int daysUntilEndDay = ((int)endDay - (int)start.DayOfWeek + 7) % 7;
+            return start.AddDays(daysUntilEndDay);
+        }
+
+        private static string SelectFolderLocation()
+        {
+            string folderPath;
+            bool isValidPath;
 
             do
             {
-                Console.Write("> ");
-                string consoleRead = Console.ReadLine();
-                isValidInput = int.TryParse(consoleRead, out consoleInput) && (consoleInput >= 1 && consoleInput <= 2);
+                DisplayFolderOptions();
+                int choice = GetValidUserChoice();
+                folderPath = choice == 1 ? DefaultPath : GetUserSpecifiedPath();
+                isValidPath = Directory.Exists(folderPath);
 
-                if (!isValidInput)
+                if (!isValidPath)
                 {
-                    Console.WriteLine("Invalid input! Try again.");
+                    Console.WriteLine("Invalid directory path! Try again");
                 }
+            } while (!isValidPath);
 
-            } while (!isValidInput);
-
-            if (consoleInput == 1)
-            {
-                Console.WriteLine();
-                ReportGenerator report = new ReportGenerator(hardcodedPath);
-            }
-            else if (consoleInput == 2)
-            {
-                string folderPathInput = String.Empty;
-                Console.WriteLine("Input full folder path: ");
-                Console.WriteLine("(For faster access copy and paste full folder path from Explorer)");
-                Console.Write("> ");
-                folderPathInput = Console.ReadLine();
-
-                Console.WriteLine();
-                ReportGenerator report = new ReportGenerator(folderPathInput);
-            }
-            else
-                throw new ArgumentOutOfRangeException("Invalid menu input was provided!");
-
+            return folderPath;
         }
 
-        public static void ClearLicenseMsg()
+        private static void DisplayFolderOptions()
         {
-            // Doing this to trigger DocX free license message in console to clear it
+            Console.WriteLine("\nSelect folder location:");
+            Console.WriteLine($"1. Use default location \n({DefaultPath})");
+            Console.WriteLine("2. Manually specify folder path");
+        }
+
+        private static int GetValidUserChoice()
+        {
+            while (true)
+            {
+                Console.Write("> ");
+                if (int.TryParse(Console.ReadLine(), out int choice) && (choice == 1 || choice == 2))
+                {
+                    return choice;
+                }
+                Console.WriteLine("Invalid input! Try again");
+            }
+        }
+
+        private static string GetUserSpecifiedPath()
+        {
+            Console.WriteLine();
+            Console.WriteLine("Enter the folder path:");
+            Console.Write("> ");
+            return Console.ReadLine();
+        }
+
+        private static void ClearLicenseMsg()
+        {
             try
             {
                 DocX.Load((string)null);
             }
-            catch (Exception ex) { Console.Clear(); }
+            catch { 
+                Console.Clear(); 
+            }
         }
     }
 }

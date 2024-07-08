@@ -2,10 +2,8 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using Xceed.Document.NET;
 using Xceed.Words.NET;
 
@@ -13,477 +11,187 @@ namespace URG_Console
 {
     public class ReportGenerator
     {
+        #region Enums and Properties
         private enum Month
         {
-            січня = 1,
-            лютого = 2,
-            березня = 3,
-            квітня = 4,
-            травня = 5,
-            червня = 6,
-            липня = 7,
-            серпня = 8,
-            вересня = 9,
-            жовтня = 10,
-            листопада = 11,
-            грудня = 12
+            січня = 1, лютого = 2, березня = 3, квітня = 4, травня = 5, червня = 6,
+            липня = 7, серпня = 8, вересня = 9, жовтня = 10, листопада = 11, грудня = 12
         }
 
-        // Setting variables with default values
-        private int _weekStartDay { get; set; } = 0;
-        private int _weekEndDay { get; set; } = 0;
+        private string FolderPath { get; }
+        private DateTime ReportStartDate { get; }
+        private DateTime ReportEndDate { get; }
+        private DayOfWeek ReportEndDay { get; }
+        private List<WebParser> ParsedArticles { get; set; } = new List<WebParser>();
+        private string Header { get; set; } = "[Header not set]" + Environment.NewLine;
+        private int UnsuccessfulConnections { get; set; } = 0;
 
-        private Month _currMonthEnum { get; set; } = Month.січня;
+        private int WeekStartDay { get; set; }
+        private int WeekEndDay { get; set; }
+        private Month CurrentMonthEnum { get; set; }
+        private int CurrentYear { get; set; }
+        private bool IsReportSpanningTwoMonths { get; set; }
+        private bool IsReportSpanningTwoYears { get; set; }
+        private Month NextMonth { get; set; }
+        private int NextYear { get; set; }
+        #endregion
 
-        private int _currYear { get; set; } = 2000;
-
-        private string _header { get; set; } = "[Header not set]" + Environment.NewLine;
-
-        private int _unsuccessfulConnections { get; set; } = 0;
-
-        private string _folderPath { get; set; } = String.Empty;
-
-        private DayOfWeek _reportStartEndDay { get; set; } = DayOfWeek.Thursday;
-
-        private List<WebParser> _parsedArticles = new List<WebParser>();
-
-        public ReportGenerator(string folderPath)
+        #region Constructor and Initialization
+        public ReportGenerator(string folderPath, DateTime reportStartDate, DateTime reportEndDate, DayOfWeek reportEndDay)
         {
+            FolderPath = folderPath;
+            ReportStartDate = reportStartDate;
+            ReportEndDate = reportEndDate;
+            ReportEndDay = reportEndDay;
 
-            _folderPath = folderPath;
+            InitializeReportData();
+            ProcessArticles();
+            GenerateReports();
+        }
 
-            // Setting default report startring and ending day of the week
-            _reportStartEndDay = DayOfWeek.Thursday;
-
-            // Setting current date, including week beginnig and endning dates for the report header and filename
-            SetCurrDate();
+        private void InitializeReportData()
+        {
+            SetCurrentDate();
             SetHeader();
+        }
 
-            // Adding all parsed articles to an array
-            Dictionary<string, string> fileLinks = new Dictionary<string, string>(DocsParser.GetLinks(folderPath));
-            _parsedArticles = WebParser.ParseArticles(fileLinks);
+        private void ProcessArticles()
+        {
+            List<ArticleSource> articleSources = DocsParser.ParseDocumentsInDirectory(FolderPath);
+            ParsedArticles = WebParser.ParseArticles(articleSources);
+            SortParsedArticles();
+            DisplayParsedArticles();
+        }
 
-            // Sorting parsed articles
-            SortParsedArticlesByLINQ();
-            //sortParsedArticlesByDelegate();
-
-            DisplayParsedArtiles();
-
-            // Generating regular and extended Word reports with all obtained and processed data
+        private void GenerateReports()
+        {
             GenerateMSWordReport();
-            GenerateMSWordReport(isExtended: true);
+            //GenerateMSWordReport_Simplified();
         }
+        #endregion
 
-        private DateTime GetNextWeekday(DateTime start, DayOfWeek day)
+        #region Date and Header Management
+        private void SetCurrentDate()
         {
-            // To get next weekday value potentially exluding today's date if this a case
-            start = start.AddDays(1);
-            // The (... + 7) % 7 ensures we end up with a value in the range [0, 6]
-            int daysToAdd = ((int)day - (int)start.DayOfWeek + 7) % 7;
+            WeekStartDay = ReportStartDate.Day;
+            WeekEndDay = ReportEndDate.Day;
+            CurrentMonthEnum = (Month)ReportStartDate.Month;
+            CurrentYear = ReportStartDate.Year;
 
-            return start.AddDays(daysToAdd);
-        }
-
-        private DateTime GetPreviousWeekday(DateTime start, DayOfWeek day)
-        {
-            // To get previous weekday value potentially excluding today's date if this is the case
-            start = start.AddDays(-1);
-            // The (... + 7) % 7 ensures we end up with a value in the range [0, 6]
-            int daysToSubtract = ((int)start.DayOfWeek - (int)day + 7) % 7;
-
-            return start.AddDays(-daysToSubtract);
-        }
-
-        private DateTime GetDayOfCurrentWeek(DayOfWeek dayOfWeek)
-        {
-            var date = DateTime.Now;
-            if (date.DayOfWeek != dayOfWeek)
-            {
-                // Checking additionaly for DayOfWeek == 0 because in enum values week begins with Sunday (0)
-                var direction = date.DayOfWeek > dayOfWeek || date.DayOfWeek == 0 ? -1D : 1D;
-                do
-                {
-                    date = date.AddDays(direction);
-                } while (date.DayOfWeek != dayOfWeek);
-            }
-            return date;
-        }
-
-        private void SetCurrDate()
-        {
-            DateTime todaysDate = DateTime.Today;
-            string reportWeekStartDate = GetPreviousWeekday(todaysDate.FirstDayOfWeek(), _reportStartEndDay).ToShortDateString();
-            string reportWeekEndDate = GetDayOfCurrentWeek(_reportStartEndDay).ToShortDateString();
-
-            TrimAndSetDate(reportWeekStartDate, reportWeekEndDate);
-        }
-
-        private void TrimAndSetDate(string startDay, string endDay)
-        {
-            // WORKS ONLY IF CULTURE SET TO UKRAINE (uk-UA)!!!!!!!!!
-            Thread.CurrentThread.CurrentCulture = new CultureInfo("uk-UA", false);
-
-            try
-            {
-                // Look for the first '.' occurence
-                int startIndex = startDay.IndexOf('.');
-                int endIndex = endDay.IndexOf('.');
-
-                // Getting substring from 0 index to the first '.' occurence to get day
-                _weekStartDay = int.Parse(startDay.Substring(0, startIndex));
-                _weekEndDay = int.Parse(endDay.Substring(0, endIndex));
-
-                // Getting subsrting betwee the first '.' and second '.' occurence to get month 
-                int monthIndex = int.Parse(startDay.Substring(startDay.IndexOf('.') + 1, startDay.IndexOf('.', startDay.IndexOf('.'))));
-                _currMonthEnum = (Month)monthIndex;
-
-                // Removing substring from the beginning to the second '.' occurence to get the year
-                _currYear = int.Parse(endDay.Remove(0, (endDay.IndexOf('.', endDay.IndexOf('.') + 1)) + 1));
-
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("[ReportGenerator] " + ex.Message);
-                Console.WriteLine("Error occured during setting date. Need to set date manually in the report");
-            }
+            IsReportSpanningTwoMonths = ReportStartDate.Month != ReportEndDate.Month;
+            IsReportSpanningTwoYears = ReportStartDate.Year != ReportEndDate.Year;
+            NextMonth = IsReportSpanningTwoMonths ? (Month)ReportEndDate.Month : CurrentMonthEnum;
+            NextYear = IsReportSpanningTwoYears ? ReportEndDate.Year : CurrentYear;
         }
 
         private void SetHeader()
         {
             try
             {
-                if (_weekStartDay < _weekEndDay)
-                    _header = "Автор - Ярослав Довгопол" + Environment.NewLine + $"Публікації, що вийшли в період з {_weekStartDay} по {_weekEndDay} {_currMonthEnum} {_currYear} року" + Environment.NewLine;
-                else if (_weekStartDay > _weekEndDay)
+                string dateRange;
+                if (IsReportSpanningTwoYears)
                 {
-
-                    Month nextMonth = (int)_currMonthEnum >= 12 ? Month.січня : (_currMonthEnum + 1);
-                    _header = "Автор - Ярослав Довгопол" + Environment.NewLine + $"Публікації, що вийшли в період з {_weekStartDay} {_currMonthEnum} по {_weekEndDay} {nextMonth} {_currYear} року" + Environment.NewLine;
+                    dateRange = $"з {WeekStartDay} {CurrentMonthEnum} {CurrentYear} року по {WeekEndDay} {NextMonth} {NextYear} року";
+                }
+                else if (IsReportSpanningTwoMonths)
+                {
+                    dateRange = $"з {WeekStartDay} {CurrentMonthEnum} по {WeekEndDay} {NextMonth} {CurrentYear} року";
                 }
                 else
-                    throw new ArgumentException("[ReportGenerator] Beginning week day and ending week day cannot be the same!");
-            }
-            catch (ArgumentException ex)
-            {
-                Console.WriteLine(ex.Message);
-                Console.WriteLine("Need to set header manually in the report");
+                {
+                    dateRange = $"з {WeekStartDay} по {WeekEndDay} {CurrentMonthEnum} {CurrentYear} року";
+                }
+
+                Header = $"Автор - Ярослав Довгопол{Environment.NewLine}Публікації, що вийшли в період {dateRange}{Environment.NewLine}";
             }
             catch (Exception ex)
             {
-                Console.WriteLine("[ReportGenerator] Unhandled exception occured: ");
-                Console.WriteLine(ex.ToString());
+                Console.WriteLine($"[ReportGenerator] Error setting header: {ex.Message}");
                 Console.WriteLine("Need to set header manually in the report");
+                Header = "[Header not set]" + Environment.NewLine;
             }
         }
+        #endregion
 
-
-        private void SortParsedArticlesByLINQ()
+        #region Article Processing and Sorting
+        private void SortParsedArticles()
         {
-            // Sorting list using LINQ query
-            if (_parsedArticles != null)
-                _parsedArticles = _parsedArticles.OrderBy(article =>
-                    { DateTime.TryParse(article.ArticleDate, out DateTime dt);
-                        return dt;
-                    }).ToList();
-        }
-
-        private void SortParsedArticlesByDelegate()
-        {
-            // Sorting list using anonymos method type delegate
-            if (_parsedArticles != null)
+            ParsedArticles = ParsedArticles?.OrderBy(article =>
             {
-                _parsedArticles.Sort(delegate (WebParser article1, WebParser article2)
-                {
-                    return article1.ArticleDate.CompareTo(article2.ArticleDate);
-                });
-            }
-
+                DateTime.TryParse(article.ArticleDate, out DateTime dt);
+                return dt;
+            }).ToList();
         }
+        #endregion
 
-       
-        internal void DisplayHeader()
+        #region Display Methods
+        public void DisplayParsedArticles()
         {
-            Console.WriteLine(_header);
-        }
-
-        internal void DisplayDate()
-        {
-            Console.WriteLine($"Current week start day: {_weekStartDay}");
-            Console.WriteLine($"Current week end day: {_weekEndDay}");
-            Console.WriteLine($"Current month: {_currMonthEnum}");
-            Console.WriteLine($"Current year: {_currYear}");
-        }
-
-        internal void DisplayParsedArtiles()
-        {
-            if (_parsedArticles == null || _parsedArticles.Count == 0)
+            if (ParsedArticles == null || ParsedArticles.Count == 0)
             {
                 Console.WriteLine("[ReportGenerator] No parsed articles to display!");
-                //Environment.Exit(-100);
+                return;
             }
-            else
-            {
-                try
-                {
-                    Console.WriteLine("\n*****Parsed Articles*****\n");
-                    for (int i = 0; i < _parsedArticles.Count; i++)
-                    {
-                        Console.WriteLine("=====================");
-
-                        if (_parsedArticles[i].ArticleHeader == "Unknown")
-                            Console.WriteLine($"{i + 1}. " + Path.GetFileName(_parsedArticles[i].ArticleFilePath));
-                        else
-                            Console.WriteLine($"{i + 1}. {_parsedArticles[i].ArticleHeader}");
-
-                        Console.WriteLine($"Date: {_parsedArticles[i].ArticleDate}");
-                        Console.WriteLine($"Article type: {_parsedArticles[i].ArticleType}");
-                        Console.WriteLine($"Amount of chars: {_parsedArticles[i].ArticleChars}");
-                        Console.WriteLine($"Exclusive: {_parsedArticles[i].ArticleExclusive}");
-                        Console.WriteLine($"Link: {_parsedArticles[i].ArticleLink}");
-                        Console.WriteLine("=====================\n");
-
-                        if (_parsedArticles[i].ArticleChars <= 0)
-                            _unsuccessfulConnections++;
-
-                    }
-                    Console.WriteLine($"Total of unsuccessful connections: {_unsuccessfulConnections}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("[ReportGenerator] " + ex.Message);
-                    Console.WriteLine("Skipping...");
-                }
-            }
-        }
-
-
-        private int GetCurrentMonthNumber()
-        {
-            DateTime date = DateTime.Today;
-            DateTime firstMonthDay = new DateTime(date.Year, date.Month, 1);
-            // Decided to go with Thursday as starting point for counting month week number 
-            DateTime firstMonthThursday = firstMonthDay.AddDays((DayOfWeek.Thursday + 7 - firstMonthDay.DayOfWeek) % 7);
-            DateTime currentWeekMonday = DateTimeExtensions.FirstDayOfWeek(date);
-
-            if (firstMonthThursday > date)
-            {
-                firstMonthDay = firstMonthDay.AddMonths(-1);
-                firstMonthThursday = firstMonthDay.AddDays((DayOfWeek.Thursday + 7 - firstMonthDay.DayOfWeek) % 7);
-            }
-            int weekNum = (int)Math.Round((currentWeekMonday - firstMonthThursday).Days / 7.0) + 1;
-            return weekNum;
-        }
-
-        private string ArabicToRoman(int num)
-        {
-            // Using this function to represent week number as a roman number in report filename, thus range 1-5 should be more than enough
-            Dictionary<int, string> romanNums = new Dictionary<int, string>(){
-                {1, "I" }, {2, "II"}, {3, "III"}, {4, "IV"}, {5, "V"}};
-
-            string answer = String.Empty;
-            try
-            {
-                if (romanNums.ContainsKey(num))
-                {
-                    romanNums.TryGetValue(num, out answer);
-                    return answer;
-                }
-
-                else
-                    throw new ArgumentOutOfRangeException("Invalid number was passed to ArabicToRoman number convertor!" + Environment.NewLine + "Acceptable range is [1-5]");
-            }
-            catch (ArgumentOutOfRangeException ex)
-            {
-                Console.WriteLine("[ReportGenerator] " + ex.Message);
-                return "I";
-            }
-        }
-
-
-        private void GenerateMSWordReport(bool isExtended = false)
-        {
-            // Initializing parsedArticles just in case if forgotted, to not to crash the application on this stage
-            if (_parsedArticles == null)
-                _parsedArticles = new List<WebParser>();
-            if (_parsedArticles.Count == 0)
-                Console.WriteLine("\n[ReportGenerator] No parsed articles can be loaded!" + Environment.NewLine + "Generating empty report...");
-
-            // Generating month date for the filename
-            string fileMonthDate = (int)_currMonthEnum < 10 ? "0" + ((int)_currMonthEnum).ToString() : ((int)_currMonthEnum).ToString();
-
-            // Creating a proper filename which contains full path
-            string fp = Path.GetFullPath(_folderPath);
-            string fn = isExtended == false ? Path.GetFileName($@"\AUTO_Dovgopol_{_currYear}_{fileMonthDate}_{ArabicToRoman(GetCurrentMonthNumber())}={_parsedArticles.Count}.docx") : Path.GetFileName($@"\AUTO_Dovgopol_{_currYear}_{fileMonthDate}_{ArabicToRoman(GetCurrentMonthNumber())}={_parsedArticles.Count}_Extended.docx");
-            string fileName = Path.Combine(fp, fn);
 
             try
             {
-                var doc = DocX.Create(fileName);
-                doc.SetDefaultFont(new Xceed.Document.NET.Font("Arial"), 12);
-                doc.InsertParagraph(_header);
-
-                //Create Table with 'n' rows and 5 columns (columns are always the same). 
-                int rows = _parsedArticles.Count + 1; // Because our first row is taken with column names
-                const int cols = 5;
-                Table t = doc.AddTable(rows, cols);
-                t.Alignment = Alignment.center;
-
-                //Setting Headers
-                //To convert to Inches (in) : pt*72 
-                t.Rows[0].Height = 0.39 * 72;
-                t.Rows[0].Cells[0].Paragraphs.First().Append($"№з/п");
-                t.Rows[0].Cells[1].Paragraphs.First().Append($"Дата");
-                t.Rows[0].Cells[2].Paragraphs.First().Append($"Заголовок");
-                t.Rows[0].Cells[3].Paragraphs.First().Append($"Жанр");
-                t.Rows[0].Cells[4].Paragraphs.First().Append($"Кільк. знаків");
-
-                // Creating list of hyperlinks from all found links in the files
-                Hyperlink[] hyperlinks = new Hyperlink[_parsedArticles.Count];
-
-                for (int i = 0; i < hyperlinks.Length; i++)
+                Console.WriteLine("\n*****Parsed Articles*****\n");
+                for (int i = 0; i < ParsedArticles.Count; i++)
                 {
-                    if (_parsedArticles[i] != null)
-                    {
-                        if (_parsedArticles[i].ArticleHeader == "Unknown")
-                        {
-                            hyperlinks[i] = doc.AddHyperlink("!!! No Link !!!: " + Path.GetFileName(_parsedArticles[i].ArticleFilePath), new Uri(_parsedArticles[i].ArticleLink));
-                        }
-                        else
-                        {
-                            hyperlinks[i] = doc.AddHyperlink(_parsedArticles[i].ArticleHeader, new Uri(_parsedArticles[i].ArticleLink));
-                        }
+                    Console.WriteLine("=====================");
+                    Console.WriteLine(ParsedArticles[i].ArticleHeader == "Unknown"
+                        ? $"{i + 1}. {Path.GetFileName(ParsedArticles[i].ArticleFilePath)}"
+                        : $"{i + 1}. {ParsedArticles[i].ArticleHeader}");
+                    Console.WriteLine($"Date: {ParsedArticles[i].ArticleDate}");
+                    Console.WriteLine($"Article type: {ParsedArticles[i].ArticleType}");
+                    Console.WriteLine($"Amount of chars: {ParsedArticles[i].ArticleChars}");
+                    Console.WriteLine($"Exclusive: {ParsedArticles[i].ArticleExclusive}");
+                    Console.WriteLine($"Link: {ParsedArticles[i].ArticleLink}");
+                    Console.WriteLine("=====================\n");
 
-                    }
-
+                    if (ParsedArticles[i].ArticleChars <= 0)
+                        UnsuccessfulConnections++;
                 }
-
-                // Creating a numbering list to have our rows properly number formatted
-                var numberedList = doc.AddList(listText: "", listType: ListItemType.Numbered);
-
-                //Fill cells by adding text.  
-                for (int i = 0; i < rows; i++)
-                {
-                    for (int j = 0; j < cols; j++)
-                    {
-
-                        // Aligning cells vertically to center left
-                        t.Rows[i].Cells[j].VerticalAlignment = VerticalAlignment.Center;
-
-                        // Aligning first and last column text to the center
-                        if (j == 0 || j == 4)
-                            t.Rows[i].Cells[j].Paragraphs.Last().Alignment = Alignment.center;
-
-                        // Setting needed column width
-                        if (j == 0)
-                            t.Rows[i].Cells[j].Width = 0.54 * 72;
-
-                        else if (j == 1)
-                            t.Rows[i].Cells[j].Width = 1.21 * 72;
-
-                        else if (j == 2)
-                            t.Rows[i].Cells[j].Width = 3.25 * 72; //2.97
-
-                        else if (j == 3)
-                            t.Rows[i].Cells[j].Width = 1.19 * 72; //1.29
-
-                        else if (j == 4)
-                            t.Rows[i].Cells[j].Width = 0.82 * 72;
-
-                        else
-                            throw new IndexOutOfRangeException();
-
-                        // Numbering columns
-                        if (j == 0 && i > 0)
-                        {
-                            t.Rows[i].Cells[j].RemoveParagraphAt(0); // Removing space before numbered
-                            t.Rows[i].Cells[j].InsertList(numberedList);
-                            t.Rows[i].Cells[j].Paragraphs.Last().Alignment = Alignment.center; // Aligning again, since apparently it resets alignment after inserting numbered list
-                        }
-
-                        // Adding some text...
-                        if (i > 0)
-                        {
-                            // Adding date
-                            if (j == 1)
-                            {
-                                // From here and now on we are doing 'i-1' since we start on i=1 to insert data, whereas our parsedArticles and hyperlinks begin with i=0
-                                if (i - 1 < _parsedArticles.Count)
-                                    t.Rows[i].Cells[j].Paragraphs.Last().Append(_parsedArticles[i - 1].ArticleDate);
-                            }
-
-                            // Adding title
-                            else if (j == 2)
-                            {
-                                // Checking that amount of links <= amount of rows. If there are more rows, skip them
-                                if (i - 1 < hyperlinks.Length && hyperlinks[i - 1] != null)
-                                {
-                                    if(isExtended == false)
-                                    {
-                                        t.Rows[i].Cells[j].Paragraphs.Last().AppendHyperlink(hyperlinks[i - 1]).
-                                            //Setting color
-                                            Color(Color.Blue).
-                                            // Setting text underline
-                                            UnderlineStyle(UnderlineStyle.singleLine);
-                                    }
-                                    else
-                                    {
-                                        string originalHyperlinkText = hyperlinks[i - 1].Text;
-                                        t.Rows[i].Cells[j].Paragraphs.Last().Append(originalHyperlinkText);
-                                        
-                                        Hyperlink extendedHyperLink = hyperlinks[i - 1];
-                                        extendedHyperLink.Text = hyperlinks[i - 1].Uri.ToString();
-
-                                        t.Rows[i].Cells[j].Paragraphs.Last().AppendLine().AppendHyperlink(extendedHyperLink).
-                                            //Setting color
-                                            Color(Color.Blue).
-                                            // Setting text underline
-                                            UnderlineStyle(UnderlineStyle.singleLine);
-                                    }
-                                } 
-                            }
-
-                            // Adding article type
-                            else if (j == 3)
-                            {
-                                if (i - 1 < _parsedArticles.Count)
-                                    t.Rows[i].Cells[j].Paragraphs.Last().Append(_parsedArticles[i - 1].ArticleType);
-                                if (_parsedArticles[i - 1].ArticleType == "Коментар")
-                                    t.Rows[i].Cells[j].Paragraphs.Last().Highlight(Highlight.yellow);
-                                if (_parsedArticles[i - 1].ArticleExclusive == true)
-                                    t.Rows[i].Cells[j].Paragraphs.Last().InsertParagraphAfterSelf("Ексклюзив").Highlight(Highlight.yellow);
-                            }
-
-                            // Adding amount of chars
-                            else if (j == 4)
-                            {
-                                if (i - 1 < _parsedArticles.Count)
-                                    t.Rows[i].Cells[j].Paragraphs.Last().Append(_parsedArticles[i - 1].ArticleChars.ToString());
-                            }
-                        }
-                    }
-
-                }
-
-                doc.InsertTable(t);
-                doc.Save();
-
-            }
-            catch (IOException ex)
-            {
-                KillProcess("WINWORD");
-                Console.WriteLine(ex.Message);
-                Console.WriteLine("[DocsParser] *** Generated reports cannot be open during the runtime. ***");
-
+                Console.WriteLine($"Total of unsuccessful connections: {UnsuccessfulConnections}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DocsParser] File: {Path.GetFileName(fileName)}");
-                Console.WriteLine("[DocsParser] Unhandled exception occured: ");
-                Console.WriteLine(ex.ToString());
+                Console.WriteLine("[ReportGenerator] " + ex.Message);
+                Console.WriteLine("Skipping...");
+            }
+        }
+        #endregion
+
+        #region Utility Methods
+        private int GetCurrentWeekNumber()
+        {
+            DateTime firstDayOfMonth = new(ReportEndDate.Year, ReportEndDate.Month, 1);
+            DateTime firstReportDayOfMonth = GetFirstReportDayOfMonth(firstDayOfMonth);
+
+            if (firstReportDayOfMonth > ReportEndDate)
+            {
+                return 1; // This is effectively the first week of the new month
             }
 
-            // MS Word can't handle filepath without double-quoting, so adding extra double quotes
-            Process.Start(@"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE", '"' + fileName + '"');
+            int weekNum = (int)Math.Ceiling((ReportEndDate - firstReportDayOfMonth).TotalDays / 7) + 1;
+            return Math.Max(1, Math.Min(5, weekNum));
+        }
+
+        private DateTime GetFirstReportDayOfMonth(DateTime firstDayOfMonth)
+        {
+            return firstDayOfMonth.AddDays((7 + (int)ReportEndDay - (int)firstDayOfMonth.DayOfWeek) % 7);
+        }
+
+        private static string ArabicToRoman(int num)
+        {
+            if (num < 1 || num > 5)
+            {
+                Console.WriteLine($"[ReportGenerator] Warning: Invalid number {num} passed to ArabicToRoman. Using 'I' as default.");
+                return "I";
+            }
+
+            string[] romanNumerals = { "I", "II", "III", "IV", "V" };
+            return romanNumerals[num - 1];
         }
 
         private static void KillProcess(string processName)
@@ -493,5 +201,326 @@ namespace URG_Console
                 process.Kill();
             }
         }
+        #endregion
+
+        #region Report Generation
+        private void GenerateMSWordReport()
+        {
+            ParsedArticles ??= new List<WebParser>();
+            if (ParsedArticles.Count == 0)
+                Console.WriteLine("\n[ReportGenerator] No parsed articles can be loaded!" + Environment.NewLine + "Generating empty report...");
+
+            string fileMonthDate = (int)CurrentMonthEnum < 10 ? "0" + ((int)CurrentMonthEnum).ToString() : ((int)CurrentMonthEnum).ToString();
+            string folderPath = Path.GetFullPath(FolderPath);
+            string fileName = Path.GetFileName($@"\AUTO_Dovgopol_{CurrentYear}_{fileMonthDate}_{ArabicToRoman(GetCurrentWeekNumber())}={ParsedArticles.Count}.docx");
+            string reportFilePath = Path.Combine(folderPath, fileName);
+
+            try
+            {
+                var doc = DocX.Create(reportFilePath);
+                doc.SetDefaultFont(new Xceed.Document.NET.Font("Arial"), 12);
+                doc.InsertParagraph(Header);
+
+                int rows = ParsedArticles.Count + 1;
+                const int cols = 5;
+                Table t = doc.AddTable(rows, cols);
+                t.Alignment = Alignment.center;
+
+                SetupTableHeaders(t);
+                Hyperlink[] hyperlinks = CreateHyperlinks(doc);
+                var numberedList = doc.AddList(listText: "", listType: ListItemType.Numbered);
+
+                FillTableWithData(t, hyperlinks, numberedList);
+
+                doc.InsertTable(t);
+                doc.Save();
+            }
+            catch (IOException ex)
+            {
+                KillProcess("WINWORD");
+                Console.WriteLine(ex.Message);
+                Console.WriteLine("[DocsParser] *** Generated reports cannot be open during the runtime. ***");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DocsParser] File: {Path.GetFileName(reportFilePath)}");
+                Console.WriteLine("[DocsParser] Unhandled exception occurred: ");
+                Console.WriteLine(ex.ToString());
+            }
+
+            Process.Start(@"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE", '"' + reportFilePath + '"');
+        }
+
+        private static void SetupTableHeaders(Table t)
+        {
+            t.Rows[0].Height = 0.39 * 72;
+            t.Rows[0].Cells[0].Paragraphs.First().Append("№з/п");
+            t.Rows[0].Cells[1].Paragraphs.First().Append("Дата");
+            t.Rows[0].Cells[2].Paragraphs.First().Append("Заголовок");
+            t.Rows[0].Cells[3].Paragraphs.First().Append("Жанр");
+            t.Rows[0].Cells[4].Paragraphs.First().Append("Кільк. знаків");
+        }
+
+        private Hyperlink[] CreateHyperlinks(DocX doc)
+        {
+            Hyperlink[] hyperlinks = new Hyperlink[ParsedArticles.Count];
+            for (int i = 0; i < hyperlinks.Length; i++)
+            {
+                if (ParsedArticles[i] != null)
+                {
+                    try
+                    {
+                        string linkText = ParsedArticles[i].ArticleHeader == "Unknown"
+                            ? Path.GetFileName(ParsedArticles[i].ArticleFilePath)
+                            : ParsedArticles[i].ArticleHeader;
+
+                        if (string.IsNullOrWhiteSpace(ParsedArticles[i].ArticleLink))
+                        {
+                            // Create a file URI for the local file
+                            string fullPath = Path.GetFullPath(ParsedArticles[i].ArticleFilePath);
+                            Uri fileUri = new(fullPath);
+                            hyperlinks[i] = doc.AddHyperlink("!!! NO LINK FOUND !!! " + linkText + " (Click To Open)", fileUri);
+                        }
+                        else
+                        {
+                            // Create hyperlink with valid URL
+                            hyperlinks[i] = doc.AddHyperlink(linkText, new Uri(ParsedArticles[i].ArticleLink));
+                        }
+                    }
+                    catch (UriFormatException ex)
+                    {
+                        Console.WriteLine($"[ReportGenerator] Invalid URI for article {i + 1}: {ex.Message}");
+                        // Attempt to create a file URI as a fallback
+                        try
+                        {
+                            string fullPath = Path.GetFullPath(ParsedArticles[i].ArticleFilePath);
+                            Uri fileUri = new(fullPath);
+                            hyperlinks[i] = doc.AddHyperlink($"Local File for article {i + 1}", fileUri);
+                        }
+                        catch
+                        {
+                            hyperlinks[i] = doc.AddHyperlink($"Invalid URL for article {i + 1}", new Uri("about:blank"));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[ReportGenerator] Unexpected error creating hyperlink for article {i + 1}: {ex.Message}");
+                        hyperlinks[i] = doc.AddHyperlink($"Error in article {i + 1}", new Uri("about:blank"));
+                    }
+                }
+            }
+            return hyperlinks;
+        }
+
+        private void FillTableWithData(Table t, Hyperlink[] hyperlinks, List numberedList)
+        {
+            for (int i = 0; i < t.RowCount; i++)
+            {
+                for (int j = 0; j < t.ColumnCount; j++)
+                {
+                    SetupTableCell(t, i, j, numberedList);
+                    if (i > 0)
+                    {
+                        FillTableCell(t, i, j, hyperlinks);
+                    }
+                }
+            }
+        }
+
+        private static void SetupTableCell(Table t, int i, int j, List numberedList)
+        {
+            t.Rows[i].Cells[j].VerticalAlignment = VerticalAlignment.Center;
+
+            if (j == 0 || j == 4)
+                t.Rows[i].Cells[j].Paragraphs.Last().Alignment = Alignment.center;
+
+            SetCellWidth(t.Rows[i].Cells[j], j);
+
+            if (j == 0 && i > 0)
+            {
+                t.Rows[i].Cells[j].RemoveParagraphAt(0);
+                t.Rows[i].Cells[j].InsertList(numberedList);
+                t.Rows[i].Cells[j].Paragraphs.Last().Alignment = Alignment.center;
+            }
+        }
+
+        private static void SetCellWidth(Cell cell, int columnIndex)
+        {
+            switch (columnIndex)
+            {
+                case 0: cell.Width = 0.54 * 72; break;
+                case 1: cell.Width = 1.21 * 72; break;
+                case 2: cell.Width = 3.25 * 72; break;
+                case 3: cell.Width = 1.19 * 72; break;
+                case 4: cell.Width = 0.82 * 72; break;
+                default: throw new IndexOutOfRangeException();
+            }
+        }
+
+        private void FillTableCell(Table t, int i, int j, Hyperlink[] hyperlinks)
+        {
+            int articleIndex = i - 1;
+            switch (j)
+            {
+                case 1:
+                    if (articleIndex < ParsedArticles.Count)
+                        t.Rows[i].Cells[j].Paragraphs.Last().Append(ParsedArticles[articleIndex].ArticleDate);
+                    break;
+                case 2:
+                    if (articleIndex < hyperlinks.Length && hyperlinks[articleIndex] != null)
+                    {
+                        AddHyperlinkToCell(t.Rows[i].Cells[j], hyperlinks[articleIndex]);
+                    }
+                    break;
+                case 3:
+                    if (articleIndex < ParsedArticles.Count)
+                    {
+                        AddArticleTypeToCell(t.Rows[i].Cells[j], ParsedArticles[articleIndex]);
+                    }
+                    break;
+                case 4:
+                    if (articleIndex < ParsedArticles.Count)
+                        t.Rows[i].Cells[j].Paragraphs.Last().Append(ParsedArticles[articleIndex].ArticleChars.ToString());
+                    break;
+            }
+        }
+
+        private static void AddHyperlinkToCell(Cell cell, Hyperlink hyperlink)
+        {
+            cell.Paragraphs.Last().AppendHyperlink(hyperlink)
+                .Color(Color.Blue)
+                .UnderlineStyle(UnderlineStyle.singleLine);
+        }
+
+        private static void AddArticleTypeToCell(Cell cell, WebParser article)
+        {
+            cell.Paragraphs.Last().Append(article.ArticleType);
+            if (article.ArticleType == "Коментар")
+                cell.Paragraphs.Last().Highlight(Highlight.yellow);
+            if (article.ArticleExclusive)
+                cell.Paragraphs.Last().InsertParagraphAfterSelf("Ексклюзив").Highlight(Highlight.yellow);
+        }
+        #endregion
+
+        #region Simplified Report Generation (Deprecated)
+        private void GenerateMSWordReport_Simplified()
+        {
+            ParsedArticles ??= new List<WebParser>();
+            if (ParsedArticles.Count == 0)
+                Console.WriteLine("\n[ReportGenerator] No parsed articles can be loaded!" + Environment.NewLine + "Generating empty report...");
+
+            string fileMonthDate = (int)CurrentMonthEnum < 10 ? "0" + ((int)CurrentMonthEnum).ToString() : ((int)CurrentMonthEnum).ToString();
+            string fp = Path.GetFullPath(FolderPath);
+            string fn = Path.GetFileName($@"\AUTO_Dovgopol_{CurrentYear}_{fileMonthDate}_{ArabicToRoman(GetCurrentWeekNumber())}={ParsedArticles.Count}_Simplified.docx");
+            string fileName = Path.Combine(fp, fn);
+
+            try
+            {
+                var doc = DocX.Create(fileName);
+                doc.SetDefaultFont(new Xceed.Document.NET.Font("Arial"), 12);
+                doc.InsertParagraph(Header);
+
+                int rows = ParsedArticles.Count + 1;
+                const int cols = 2;
+                Table t = doc.AddTable(rows, cols);
+                t.Alignment = Alignment.center;
+
+                SetupSimplifiedTableHeaders(t);
+                Hyperlink[] hyperlinks = CreateHyperlinks(doc);
+                var numberedList = doc.AddList(listText: "", listType: ListItemType.Numbered);
+
+                FillSimplifiedTableWithData(t, hyperlinks, numberedList);
+
+                doc.InsertTable(t);
+                doc.Save();
+            }
+            catch (IOException ex)
+            {
+                KillProcess("WINWORD");
+                Console.WriteLine(ex.Message);
+                Console.WriteLine("[DocsParser] *** Generated reports cannot be open during the runtime. ***");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DocsParser] File: {Path.GetFileName(fileName)}");
+                Console.WriteLine("[DocsParser] Unhandled exception occurred: ");
+                Console.WriteLine(ex.ToString());
+            }
+
+            Process.Start(@"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE", '"' + fileName + '"');
+        }
+
+        private static void SetupSimplifiedTableHeaders(Table t)
+        {
+            t.Rows[0].Height = 0.39 * 72;
+            t.Rows[0].Cells[0].Paragraphs.First().Append("№з/п");
+            t.Rows[0].Cells[1].Paragraphs.First().Append("Заголовок");
+        }
+
+        private void FillSimplifiedTableWithData(Table t, Hyperlink[] hyperlinks, List numberedList)
+        {
+            for (int i = 0; i < t.RowCount; i++)
+            {
+                for (int j = 0; j < t.ColumnCount; j++)
+                {
+                    SetupSimplifiedTableCell(t, i, j, numberedList);
+                    if (i > 0)
+                    {
+                        FillSimplifiedTableCell(t, i, j, hyperlinks);
+                    }
+                }
+            }
+        }
+
+        private static void SetupSimplifiedTableCell(Table t, int i, int j, List numberedList)
+        {
+            t.Rows[i].Cells[j].VerticalAlignment = VerticalAlignment.Center;
+
+            if (j == 0)
+            {
+                t.Rows[i].Cells[j].Paragraphs.Last().Alignment = Alignment.center;
+                t.Rows[i].Cells[j].Width = 0.54 * 72;
+
+                if (i > 0)
+                {
+                    t.Rows[i].Cells[j].RemoveParagraphAt(0);
+                    t.Rows[i].Cells[j].InsertList(numberedList);
+                    t.Rows[i].Cells[j].Paragraphs.Last().Alignment = Alignment.center;
+                }
+            }
+            else if (j == 1)
+            {
+                t.Rows[i].Cells[j].Width = 7.96 * 72;
+            }
+        }
+
+        private void FillSimplifiedTableCell(Table t, int i, int j, Hyperlink[] hyperlinks)
+        {
+            if (j == 1)
+            {
+                int articleIndex = i - 1;
+                if (articleIndex < hyperlinks.Length && hyperlinks[articleIndex] != null)
+                {
+                    AddSimplifiedHyperlinkToCell(t.Rows[i].Cells[j], hyperlinks[articleIndex], ParsedArticles[articleIndex]);
+                }
+            }
+        }
+
+        private static void AddSimplifiedHyperlinkToCell(Cell cell, Hyperlink hyperlink, WebParser article)
+        {
+            string originalHyperlinkText = hyperlink.Text;
+            cell.Paragraphs.Last().Append(originalHyperlinkText);
+
+            Hyperlink extendedHyperLink = hyperlink;
+            extendedHyperLink.Text = hyperlink.Uri.ToString();
+
+            cell.Paragraphs.Last().AppendLine().AppendHyperlink(extendedHyperLink)
+                .Color(Color.Blue)
+                .UnderlineStyle(UnderlineStyle.singleLine);
+
+            if (article.ArticleType == "Коментар")
+                cell.Paragraphs.Last().Append(" " + article.ArticleType.ToUpper()).Bold();
+        }
+        #endregion
     }
 }

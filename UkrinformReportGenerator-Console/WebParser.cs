@@ -5,21 +5,22 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Xml.XPath;
+using System.Globalization;
+using System.Net;
 
 namespace URG_Console
 {
-    internal class WebParser
+    public class WebParser
     {
-        // Internal class variables
-        internal string ArticleDate { get; private set; } = "**.**.****";
-        internal string ArticleHeader { get; private set; } = "Unknown";
-        internal string ArticleType { get; private set; } = "N/A";
-        internal int ArticleChars { get; private set; } = 0;
-        internal string ArticleLink { get; private set; } = "https://nolink.ukrinform/";
-        internal bool ArticleExclusive { get; private set; } = false;
-        internal string ArticleFilePath { get; private set; } = String.Empty;
+        public string ArticleDate { get; private set; } = "**.**.****";
+        public string ArticleHeader { get; private set; } = "Unknown";
+        public string ArticleType { get; private set; } = "N/A";
+        public int ArticleChars { get; private set; } = 0;
+        public string ArticleLink { get; private set; } = "";
+        public bool ArticleExclusive { get; private set; } = false;
+        public string ArticleFilePath { get; private set; } = String.Empty;
 
-        public WebParser(string date = "**.**.****", string header = "Unknown", string type = "N/A", int chars = 0, string link = "https://nolink.ukrinform/", bool exclusive = false, string filePath = "")
+        public WebParser(string date = "**.**.****", string header = "Unknown", string type = "N/A", int chars = 0, string link = "", bool exclusive = false, string filePath = "")
         {
             ArticleDate = date;
             ArticleHeader = header;
@@ -30,119 +31,187 @@ namespace URG_Console
             ArticleFilePath = filePath;
         }
 
-        internal static List<WebParser> ParseArticles(Dictionary<string, string> fileLinks)
+        public static List<WebParser> ParseArticles(List<ArticleSource> articleSources)
         {
-            Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("uk-UA");
+            SetCultureToUkrainian();
+            ValidateArticleSources(articleSources);
 
-            if (fileLinks == null || fileLinks.Count == 0)
-                Console.WriteLine("\n[WebParser] No links were passed to the parser!");
-            else
-                Console.WriteLine("\n[WebParser] Links loaded successfully!");
+            var articles = new List<WebParser>();
 
-            WebParser[] articles = new WebParser[fileLinks.Count];
-
-            for (int i = 0; i < fileLinks.Count; i++)
+            for (int i = 0; i < articleSources.Count; i++)
             {
                 try
                 {
-
-                    HtmlWeb web = new HtmlWeb();
-
-                    if (fileLinks.ElementAt(i).Key.Contains("https://nolink.ukrinform"))
-                    {
-                        throw new HtmlWebException("A file with no link was passed to WebParser!");
-                    }
-
-                    HtmlDocument doc = web.Load(fileLinks.ElementAt(i).Key);
-
-                    string newsTitle = "";
-                    HtmlNode[] newsTitlesArray = doc.DocumentNode.SelectNodes("//h1[@class='newsTitle'] | //div[@class='firstTitle']")?.ToArray() ?? throw new XPathException("Title body node is missing. Cannot obtain any text");
-                    // Replacing HTML tags in the article's title with proper symbols
-                    for (int j = 0; j < newsTitlesArray.Count(); j++)
-                        newsTitle += newsTitlesArray[j].InnerText.Replace("&ndash;", "-").Replace("&laquo;", "\"").Replace("&raquo;", "\"").Replace("&rsquo;", "'").Replace("&nbsp;", " ").Replace("&#039;", "'").Replace("&amp;", "&").Trim();
-
-                    string publishDate = "";
-                    HtmlNode[] publishDateArray = doc.DocumentNode.SelectNodes("//time[@datetime] | //div[@class='firstDate']")?.ToArray() ?? throw new XPathException("Date body node is missing. Cannot obtain any text");
-                    publishDate += publishDateArray[0].InnerText.Trim();
-
-                    HtmlNode[] newsText = doc.DocumentNode.SelectNodes("//div[@class='newsText'] | //div[@class='interviewText']")?.ToArray() ?? throw new XPathException("Text body node is missing. Cannot obtain any text"); // Couldn't find a way to work with null-coalescing operator (??), so simply throw an exception
-                    bool newsExclusive = doc.DocumentNode.SelectSingleNode("//div[@class='newsPrefix']")?.InnerText == "Ексклюзив" ? true : false;
-                    string newsLink = fileLinks.ElementAt(i).Key;
-
-                    string newsLinkFilePath = fileLinks.ElementAt(i).Value;
-
-                    // Removing timestamp from full publish date
-                    string fixedDate = publishDate?.Substring(0, publishDate.LastIndexOf(" "));
-
-                    // Removing useless banners, such as 'Читайте також'
-                    var uselessBanners = doc.DocumentNode.SelectNodes("//section[@class='read']");
-
-                    if (uselessBanners != null)
-                    {
-                        foreach (var item in uselessBanners)
-                        {
-                            item.Remove();
-                        }
-                    }
-
-                    string finalText = newsTitle + Environment.NewLine + fixedDate + Environment.NewLine;
-
-                    // Replacing HTML tags in the article's body with proper symbols and saving result to final string
-                    for (int j = 0; j < newsText.Count(); j++)
-                    {
-                        finalText += newsText[j].InnerText.Replace("&ndash;", "-").Replace("&laquo;", "\"").Replace("&raquo;", "\"").Replace("&rsquo;", "'").Replace("&nbsp;", " ").Replace("&#039;", "'").Replace("&amp;", "&");
-                    }
-
-                    // Counting number of non-white space chars in text
-                    int textCharsAmount = CountNonWhiteSpaceChars(finalText);
-
-                    // Setting article type
-                    string newsType = "Undefined";
-                    if (textCharsAmount > 0 && textCharsAmount < 1400)
-                        newsType = "Інф. повідомлення";
-                    else if (textCharsAmount >= 1400 && textCharsAmount < 5000)
-                        newsType = "Розш. інф. повідомлення";
-                    else if (textCharsAmount >= 5000)
-                        newsType = "Коментар";
-                    else
-                        newsType = "Error";
-
-                    // Creating article object with all parsed data
-                    articles[i] = new WebParser(fixedDate, newsTitle, newsType, textCharsAmount, newsLink, newsExclusive, newsLinkFilePath);
-                    Console.WriteLine($"Total processed links: [{i + 1}/{fileLinks.Count}]");
-
-                }
-                catch (HtmlWebException ex)
-                {
-                    Console.WriteLine($"[WebParser] File: {Path.GetFileName(fileLinks.ElementAt(i).Value)}");
-                    Console.WriteLine(ex.Message);
-                    articles[i] = new WebParser(link: fileLinks.ElementAt(i).Key, filePath: fileLinks.ElementAt(i).Value);
-                }
-                catch (XPathException ex)
-                {
-                    Console.WriteLine($"[WebParser] At link: {fileLinks.ElementAt(i).Key}");
-                    Console.WriteLine(ex.Message);
-                    Console.WriteLine("Skipping to the next article...");
-                    articles[i] = new WebParser(link: fileLinks.ElementAt(i).Key, filePath: fileLinks.ElementAt(i).Value);
+                    var article = ParseSingleArticle(articleSources[i]);
+                    articles.Add(article);
+                    Console.WriteLine($"Total processed articles: [{i + 1}/{articleSources.Count}]");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("[WebParser] Unhandled exception occured: ");
-                    Console.WriteLine(ex.ToString());
+                    HandleParsingException(ex, articleSources[i]);
+                    articles.Add(CreateErrorArticle(articleSources[i]));
                 }
             }
-            return articles.ToList();
+
+            return articles;
+        }
+
+        private static void SetCultureToUkrainian()
+        {
+            Thread.CurrentThread.CurrentCulture = new CultureInfo("uk-UA");
+        }
+
+        private static void ValidateArticleSources(List<ArticleSource> articleSources)
+        {
+            if (articleSources == null || articleSources.Count == 0)
+                Console.WriteLine("\n[WebParser] No article sources were passed to the parser!");
+            else
+                Console.WriteLine("\n[WebParser] Article sources loaded successfully!");
+        }
+
+        private static WebParser ParseSingleArticle(ArticleSource articleSource)
+        {
+            if (!articleSource.HasLink)
+            {
+                Console.WriteLine($"[WebParser] No link found for file: {Path.GetFileName(articleSource.FilePath)}");
+                return CreateErrorArticle(articleSource);
+            }
+
+            var web = new HtmlWeb();
+            try
+            {
+                HtmlDocument doc = web.Load(articleSource.Link);
+                
+                string newsTitle = ExtractNewsTitle(doc);
+                string publishDate = ExtractPublishDate(doc);
+                string newsText = ExtractNewsText(doc);
+                bool newsExclusive = IsNewsExclusive(doc);
+
+                string fixedDate = RemoveTimestampFromDate(publishDate);
+
+                string finalText = CombineArticleText(newsTitle, fixedDate, newsText);
+                int textCharsAmount = CountNonWhiteSpaceChars(finalText);
+                string newsType = DetermineArticleType(textCharsAmount);
+
+                return new WebParser(fixedDate, newsTitle, newsType, textCharsAmount, articleSource.Link, newsExclusive, articleSource.FilePath);
+            }
+            catch (WebException)
+            {
+                Console.WriteLine($"[WebParser] Unable to load page for file: {Path.GetFileName(articleSource.FilePath)}");
+                return CreateErrorArticle(articleSource);
+            }
+            catch (XPathException ex)
+            {
+                Console.WriteLine($"[WebParser] Error extracting data from: {articleSource.Link}. Error: {ex.Message}");
+                return CreateErrorArticle(articleSource);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WebParser] Unexpected error processing file: {Path.GetFileName(articleSource.FilePath)}. Error: {ex.Message}");
+                return CreateErrorArticle(articleSource);
+            }
+        }
+
+        private static string ExtractNewsTitle(HtmlDocument doc)
+        {
+            HtmlNode[] newsTitlesArray = doc.DocumentNode.SelectNodes("//h1[@class='newsTitle'] | //div[@class='firstTitle']")?.ToArray() 
+                ?? throw new XPathException("Title body node is missing. Cannot obtain any text");
+
+            return string.Join("", newsTitlesArray.Select(node => CleanHtmlText(node.InnerText)));
+        }
+
+        private static string ExtractPublishDate(HtmlDocument doc)
+        {
+            HtmlNode[] publishDateArray = doc.DocumentNode.SelectNodes("//time[@datetime] | //div[@class='firstDate']")?.ToArray() 
+                ?? throw new XPathException("Date body node is missing. Cannot obtain any text");
+
+            return publishDateArray[0].InnerText.Trim();
+        }
+
+        private static string ExtractNewsText(HtmlDocument doc)
+        {
+            HtmlNode[] newsText = doc.DocumentNode.SelectNodes("//div[@class='newsText'] | //div[@class='interviewText']")?.ToArray() 
+                ?? throw new XPathException("Text body node is missing. Cannot obtain any text");
+
+            // Remove useless banners
+            foreach (var node in newsText)
+            {
+                var uselessBanners = node.SelectNodes(".//section[@class='read']");
+                if (uselessBanners != null)
+                {
+                    foreach (var banner in uselessBanners)
+                    {
+                        banner.Remove();
+                    }
+                }
+            }
+
+            return string.Join("", newsText.Select(node => CleanHtmlText(node.InnerText)));
+        }
+
+        private static bool IsNewsExclusive(HtmlDocument doc)
+        {
+            return doc.DocumentNode.SelectSingleNode("//div[@class='newsPrefix']")?.InnerText == "Ексклюзив";
+        }
+
+        private static string RemoveTimestampFromDate(string publishDate)
+        {
+            return publishDate?.Substring(0, publishDate.LastIndexOf(" "));
+        }
+        
+        private static string CombineArticleText(string newsTitle, string fixedDate, string newsText)
+        {
+            return $"{newsTitle}{Environment.NewLine}{fixedDate}{Environment.NewLine}{newsText}";
+        }
+
+        private static string DetermineArticleType(int textCharsAmount)
+        {
+            if (textCharsAmount > 0 && textCharsAmount < 1400)
+                return "Інф. повідомлення";
+            else if (textCharsAmount >= 1400 && textCharsAmount < 5000)
+                return "Розш. інф. повідомлення";
+            else if (textCharsAmount >= 5000)
+                return "Коментар";
+            else
+                return "Error";
+        }
+
+        private static string CleanHtmlText(string text)
+        {
+            return text.Replace("&ndash;", "-")
+                       .Replace("&laquo;", "\"")
+                       .Replace("&raquo;", "\"")
+                       .Replace("&rsquo;", "'")
+                       .Replace("&nbsp;", " ")
+                       .Replace("&#039;", "'")
+                       .Replace("&amp;", "&")
+                       .Trim();
         }
 
         private static int CountNonWhiteSpaceChars(string text)
         {
-            int result = 0;
-            foreach (char c in text)
+            return text.Count(c => !char.IsWhiteSpace(c));
+        }
+
+        private static void HandleParsingException(Exception ex, ArticleSource articleSource)
+        {
+            if (ex is HtmlWebException || ex is WebException)
             {
-                if (!char.IsWhiteSpace(c))
-                    result++;
+                Console.WriteLine($"[WebParser] Error processing file: {Path.GetFileName(articleSource.FilePath)}");
             }
-            return result;
+            else if (ex is XPathException)
+            {
+                Console.WriteLine($"[WebParser] Error extracting data from: {articleSource.Link}");
+            }
+            else
+            {
+                Console.WriteLine($"[WebParser] Unhandled error for file: {Path.GetFileName(articleSource.FilePath)}");
+            }
+        }
+
+        private static WebParser CreateErrorArticle(ArticleSource articleSource)
+        {
+            return new WebParser(link: articleSource.Link, filePath: articleSource.FilePath);
         }
     }
 }

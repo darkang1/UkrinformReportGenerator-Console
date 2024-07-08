@@ -24,7 +24,7 @@ namespace URG_Console
             dt.FirstDayOfWeek().AddDays(6);
 
         public static DateTime FirstDayOfMonth(this DateTime dt) =>
-            new DateTime(dt.Year, dt.Month, 1);
+            new(dt.Year, dt.Month, 1);
 
         public static DateTime LastDayOfMonth(this DateTime dt) =>
             dt.FirstDayOfMonth().AddMonths(1).AddDays(-1);
